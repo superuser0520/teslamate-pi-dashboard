@@ -13,6 +13,8 @@ const settingsStorageKey = "teslamateDashboardSettings";
 let dashboardData = null;
 let activeTab = "overview";
 let settings = loadSettings();
+let pendingRoutes = [];
+let routeRenderId = 0;
 
 const currencyOptions = [
   { code: "USD", label: "US Dollar", symbol: "$" },
@@ -176,6 +178,10 @@ function mapLink(position) {
   return `<a class="map-link" href="${href}" target="_blank" rel="noreferrer">Open map</a>`;
 }
 
+function mapAttribution() {
+  return "&copy; OpenStreetMap contributors";
+}
+
 function pointSeries(rows, key) {
   return (rows || [])
     .map((row) => ({ date: row.date, value: toNumber(row[key]) }))
@@ -213,6 +219,8 @@ function renderSparkline(rows, key, label, suffix = "") {
 function renderRoute(points) {
   const clean = (points || []).filter((point) => point.latitude != null && point.longitude != null);
   if (clean.length < 2) return `<div class="map-mini empty">Route not recorded</div>`;
+  const routeId = `route-${routeRenderId++}`;
+  pendingRoutes.push({ id: routeId, points: clean });
 
   const latitudes = clean.map((point) => toNumber(point.latitude)).filter((item) => item !== null);
   const longitudes = clean.map((point) => toNumber(point.longitude)).filter((item) => item !== null);
@@ -231,7 +239,7 @@ function renderRoute(points) {
   const last = route.at(-1).split(",");
 
   return `
-    <div class="map-mini">
+    <div class="map-mini route-map" id="${routeId}">
       <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
         <polyline points="${route.join(" ")}" />
         <circle cx="${first[0]}" cy="${first[1]}" r="2.8" class="start" />
@@ -265,9 +273,9 @@ function renderLocationCard(position) {
 
   return `
     <section class="location-card">
-      <div class="map-surface" aria-hidden="true">
-        <span class="map-pulse"></span>
-      </div>
+      ${hasLocation
+        ? `<div class="map-surface free-map" data-lat="${number(position.latitude, 6)}" data-lon="${number(position.longitude, 6)}" data-label="Current vehicle location"></div>`
+        : `<div class="map-surface" aria-hidden="true"><span class="map-pulse"></span></div>`}
       <div class="location-footer">
         <div>
           <span class="label">Last location</span>
@@ -277,6 +285,82 @@ function renderLocationCard(position) {
       </div>
     </section>
   `;
+}
+
+function initFreeMaps() {
+  if (!window.L) return;
+
+  document.querySelectorAll(".free-map").forEach((element) => {
+    if (element.dataset.ready === "true") return;
+    const lat = toNumber(element.dataset.lat);
+    const lon = toNumber(element.dataset.lon);
+    if (lat === null || lon === null) return;
+
+    const map = L.map(element, {
+      zoomControl: false,
+      attributionControl: true,
+      scrollWheelZoom: false
+    }).setView([lat, lon], 15);
+
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: mapAttribution()
+    }).addTo(map);
+
+    L.circleMarker([lat, lon], {
+      radius: 8,
+      color: "#53c7ff",
+      weight: 3,
+      fillColor: "#53c7ff",
+      fillOpacity: 0.85
+    }).addTo(map).bindPopup(element.dataset.label || "Vehicle location");
+
+    element._leafletMap = map;
+    element.dataset.ready = "true";
+    setTimeout(() => map.invalidateSize(), 50);
+  });
+
+  pendingRoutes.forEach((route) => {
+    const element = document.getElementById(route.id);
+    if (!element || element.dataset.ready === "true") return;
+    const latLngs = route.points
+      .map((point) => [toNumber(point.latitude), toNumber(point.longitude)])
+      .filter(([lat, lon]) => lat !== null && lon !== null);
+    if (latLngs.length < 2) return;
+
+    const map = L.map(element, {
+      zoomControl: false,
+      attributionControl: true,
+      scrollWheelZoom: false
+    });
+
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: mapAttribution()
+    }).addTo(map);
+
+    L.polyline(latLngs, { color: "#53c7ff", weight: 4, opacity: 0.9 }).addTo(map);
+    L.circleMarker(latLngs[0], { radius: 6, color: "#35d487", fillColor: "#35d487", fillOpacity: 1 }).addTo(map);
+    L.circleMarker(latLngs.at(-1), { radius: 6, color: "#ffad32", fillColor: "#ffad32", fillOpacity: 1 }).addTo(map);
+    map.fitBounds(latLngs, { padding: [22, 22] });
+
+    element._leafletMap = map;
+    element.dataset.ready = "true";
+    setTimeout(() => map.invalidateSize(), 50);
+  });
+}
+
+function wireMapResize() {
+  document.querySelectorAll(".detail-row").forEach((row) => {
+    row.addEventListener("toggle", () => {
+      if (!row.open) return;
+      setTimeout(() => {
+        row.querySelectorAll(".route-map").forEach((element) => {
+          element._leafletMap?.invalidateSize();
+        });
+      }, 80);
+    });
+  });
 }
 
 function groupByMonth(rows, dateKey) {
@@ -630,6 +714,8 @@ function setPageCopy() {
 }
 
 function render() {
+  pendingRoutes = [];
+  routeRenderId = 0;
   setPageCopy();
   tabButtons.forEach((button) => button.classList.toggle("active", button.dataset.tab === activeTab));
 
@@ -638,6 +724,7 @@ function render() {
 
   if (!dashboardData && activeTab !== "settings") {
     appViewEl.innerHTML = `<section class="panel"><h3>Loading</h3><p class="small">Connecting to TeslaMate...</p></section>`;
+    initFreeMaps();
     return;
   }
 
@@ -652,6 +739,8 @@ function render() {
     document.querySelector("#themeSelect").addEventListener("change", (event) => saveSettings({ theme: event.target.value }));
     document.querySelector("#densitySelect").addEventListener("change", (event) => saveSettings({ density: event.target.value }));
   }
+  initFreeMaps();
+  wireMapResize();
 }
 
 async function fetchDashboard() {
