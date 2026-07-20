@@ -9,35 +9,40 @@
   </head>
   <body>
     <header class="topbar">
-      <div>
-        <p class="eyebrow">TeslaMate Garage</p>
-        <h1>Today</h1>
-      </div>
-      <div class="status-pill" id="connectionStatus">Connecting</div>
+      <a class="brand" href="/">
+        <span class="brand-mark">T</span>
+        <span>TeslaMate</span>
+      </a>
+      <nav class="top-actions" aria-label="Dashboard status">
+        <span class="privacy-pill">Local data</span>
+        <span class="status-pill" id="connectionStatus">Connecting</span>
+      </nav>
     </header>
 
     <main>
-      <section class="section-title">
-        <h2>Overview</h2>
-      </section>
-
-      <section class="summary-grid" id="summaryGrid" aria-live="polite">
-        <article class="metric">
-          <span>Vehicles</span>
-          <strong id="vehicleCount">-</strong>
-        </article>
-        <article class="metric">
-          <span>Last Refresh</span>
-          <strong id="lastRefresh">-</strong>
-        </article>
-        <article class="metric">
-          <span>Database</span>
-          <strong id="databaseStatus">-</strong>
-        </article>
-      </section>
-
-      <section class="section-title">
-        <h2>Vehicles</h2>
+      <section class="hero">
+        <p class="eyebrow">Private Tesla analytics</p>
+        <h1>Your TeslaMate, made pocket friendly.</h1>
+        <p class="hero-copy">A clean live view for your self-hosted TeslaMate server, tuned for quick checks from any device on your network.</p>
+        <div class="quick-actions" aria-label="Quick links">
+          <a id="teslamateLink" href="/api/health" target="_blank" rel="noreferrer">TeslaMate</a>
+          <a id="grafanaLink" href="/api/health" target="_blank" rel="noreferrer">Grafana</a>
+          <a href="/api/health" target="_blank" rel="noreferrer">Health</a>
+        </div>
+        <div class="summary-grid" id="summaryGrid" aria-live="polite">
+          <article class="metric">
+            <span>Vehicles</span>
+            <strong id="vehicleCount">-</strong>
+          </article>
+          <article class="metric">
+            <span>Last Refresh</span>
+            <strong id="lastRefresh">-</strong>
+          </article>
+          <article class="metric">
+            <span>Database</span>
+            <strong id="databaseStatus">-</strong>
+          </article>
+        </div>
       </section>
 
       <section class="vehicle-list" id="vehicleList"></section>

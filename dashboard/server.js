@@ -192,6 +192,88 @@ async function getLatestState(client, carId) {
   return rows[0] || null;
 }
 
+async function getRecentChargeSessions(client, carId) {
+  const columns = await tableColumns(client, "charging_processes");
+  if (!columns.size) {
+    return [];
+  }
+
+  const dateColumn = columns.has("start_date") ? "start_date" : "id";
+  const fields = selectList(columns, [
+    "id",
+    "start_date",
+    "end_date",
+    "charge_energy_added",
+    "cost",
+    "duration_min",
+    "start_battery_level",
+    "end_battery_level",
+    "outside_temp_avg"
+  ]);
+  if (!fields) {
+    return [];
+  }
+
+  const whereSql = columns.has("car_id") ? `where "car_id" = $1` : "";
+  const params = columns.has("car_id") ? [carId] : [];
+  const { rows } = await client.query(
+    `select ${fields}
+       from "charging_processes"
+      ${whereSql}
+      order by "${dateColumn}" desc
+      limit $${params.length + 1}`,
+    [...params, 8]
+  );
+
+  return rows;
+}
+
+function sumNumbers(rows, key) {
+  return rows.reduce((sum, row) => sum + (typeof row[key] === "number" ? row[key] : 0), 0);
+}
+
+async function getDriveStats(client, carId) {
+  const columns = await tableColumns(client, "drives");
+  if (!columns.size || !columns.has("start_date")) {
+    return { monthDriveDistance: 0 };
+  }
+
+  const distanceExpr = columns.has("distance") ? `coalesce(sum("distance"), 0)` : "0";
+  const where = columns.has("car_id")
+    ? `where "car_id" = $1 and "start_date" >= now() - interval '30 days'`
+    : `where "start_date" >= now() - interval '30 days'`;
+  const params = columns.has("car_id") ? [carId] : [];
+  const { rows } = await client.query(
+    `select ${distanceExpr}::float as "monthDriveDistance" from "drives" ${where}`,
+    params
+  );
+
+  return rows[0] || { monthDriveDistance: 0 };
+}
+
+async function getChargeStats(client, carId) {
+  const columns = await tableColumns(client, "charging_processes");
+  if (!columns.size || !columns.has("start_date")) {
+    return { monthChargeEnergy: 0, monthChargeCost: 0 };
+  }
+
+  const energyExpr = columns.has("charge_energy_added") ? `coalesce(sum("charge_energy_added"), 0)` : "0";
+  const costExpr = columns.has("cost") ? `coalesce(sum("cost"), 0)` : "0";
+  const where = columns.has("car_id")
+    ? `where "car_id" = $1 and "start_date" >= now() - interval '30 days'`
+    : `where "start_date" >= now() - interval '30 days'`;
+  const params = columns.has("car_id") ? [carId] : [];
+  const { rows } = await client.query(
+    `select ${energyExpr}::float as "monthChargeEnergy",
+            ${costExpr}::float as "monthChargeCost"
+       from "charging_processes"
+      ${where}`,
+    params
+  );
+
+  return rows[0] || { monthChargeEnergy: 0, monthChargeCost: 0 };
+}
+
 async function getDashboard() {
   const client = await pool.connect();
 
@@ -250,7 +332,10 @@ async function getDashboard() {
       ], "start_date", carWhere, [car.id], 8);
 
       const chargingProcess = await getLatestChargeProcess(client, car.id);
+      const recentCharges = await getRecentChargeSessions(client, car.id);
       const state = await getLatestState(client, car.id);
+      const driveStats = await getDriveStats(client, car.id);
+      const chargeStats = await getChargeStats(client, car.id);
 
       return {
         car,
@@ -258,7 +343,15 @@ async function getDashboard() {
         position,
         charge,
         latestChargingProcess: chargingProcess,
-        recentDrives: drives
+        recentCharges,
+        recentDrives: drives,
+        stats: {
+          recentDriveDistance: sumNumbers(drives, "distance"),
+          recentChargeEnergy: sumNumbers(recentCharges, "charge_energy_added"),
+          recentChargeCost: sumNumbers(recentCharges, "cost"),
+          ...driveStats,
+          ...chargeStats
+        }
       };
     }));
 

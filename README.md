@@ -55,7 +55,7 @@ Grafana starts with `admin` / `admin`; change the password when prompted.
 http://<raspberry-pi-ip>:8080
 ```
 
-The dashboard shows vehicle status, battery, range, charging, climate, location, odometer, and recent drives from the TeslaMate database.
+The dashboard shows vehicle status, battery, range, charging, recent charge sessions, recent drives, 30-day statistics, climate, location, odometer, and self-hosted system status from the TeslaMate database.
 
 ## Tesla Account Setup
 
