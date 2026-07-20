@@ -35,6 +35,8 @@ const escapeHtml = (input) => String(input ?? "-").replace(/[&<>"']/g, (char) =>
 const value = (input) => escapeHtml(input ?? "-");
 const number = (input, digits = 0) => typeof input === "number" ? input.toFixed(digits) : "-";
 const fixed = (input, suffix = "", digits = 0) => typeof input === "number" ? `${input.toFixed(digits)}${suffix}` : "-";
+const temperature = (input) => typeof input === "number" ? `${input.toFixed(1)} C` : "Not reported";
+const elevation = (input) => typeof input === "number" ? `${input.toFixed(0)} m` : "Not recorded";
 const dateTime = (input) => input ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(input)) : "-";
 const shortDate = (input) => input ? new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(input)) : "-";
 const timeOnly = (input) => input ? new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(input)) : "-";
@@ -190,6 +192,8 @@ function renderOverview(cars) {
                     ${renderKv("Ideal Range", distance(position?.ideal_battery_range ?? position?.rated_battery_range))}
                     ${renderKv("Odometer", distance(position?.odometer))}
                     ${renderKv("30 Day Trips", distance(stats.monthDriveDistance))}
+                    ${renderKv("Outside Temp", temperature(position?.outside_temp))}
+                    ${renderKv("Inside Temp", temperature(position?.inside_temp))}
                   </div>
                 </div>
               </section>
@@ -216,9 +220,9 @@ function renderOverview(cars) {
               <div class="kv-grid">
                 ${renderKv("Speed", speed(position?.speed))}
                 ${renderKv("Power", fixed(position?.power, " kW"))}
-                ${renderKv("Outside", fixed(position?.outside_temp, " C", 1))}
-                ${renderKv("Inside", fixed(position?.inside_temp, " C", 1))}
-                ${renderKv("Elevation", fixed(position?.elevation, " m"))}
+                ${renderKv("Outside", temperature(position?.outside_temp))}
+                ${renderKv("Inside", temperature(position?.inside_temp))}
+                ${renderKv("Elevation", elevation(position?.elevation))}
                 ${renderKv("Location", mapLink(position))}
                 ${renderKv("Vehicle ID", value(car.id))}
                 ${renderKv("Refresh", "30 seconds")}
