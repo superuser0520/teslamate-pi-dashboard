@@ -42,7 +42,7 @@ fi
 mkdir -p import backups
 
 docker compose pull
-docker compose up -d
+docker compose up -d --build
 
 pi_ip="$(hostname -I | awk '{print $1}')"
 teslamate_port="$(grep -E '^TESLAMATE_PORT=' .env | cut -d= -f2 || true)"
