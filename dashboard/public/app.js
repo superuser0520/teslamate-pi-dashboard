@@ -137,6 +137,28 @@ function mapLink(position) {
   return `<a class="map-link" href="${href}" target="_blank" rel="noreferrer">Open map</a>`;
 }
 
+function renderLocationCard(position) {
+  const hasLocation = position?.latitude != null && position?.longitude != null;
+  const href = hasLocation
+    ? `https://www.google.com/maps/search/?api=1&query=${position.latitude},${position.longitude}`
+    : "#";
+
+  return `
+    <section class="location-card">
+      <div class="map-surface" aria-hidden="true">
+        <span class="map-pulse"></span>
+      </div>
+      <div class="location-footer">
+        <div>
+          <span class="label">Last location</span>
+          <strong>${hasLocation ? `${number(position.latitude, 4)}, ${number(position.longitude, 4)}` : "Not reported"}</strong>
+        </div>
+        ${hasLocation ? `<a class="map-button" href="${href}" target="_blank" rel="noreferrer">Open Maps</a>` : `<span class="map-button disabled">No GPS</span>`}
+      </div>
+    </section>
+  `;
+}
+
 function groupByMonth(rows, dateKey) {
   return rows.reduce((groups, row) => {
     const key = monthLabel(row[dateKey]);
@@ -205,6 +227,7 @@ function renderOverview(cars) {
         return `
           <article class="vehicle">
             ${renderVehicleHero(snapshot)}
+            ${renderLocationCard(position)}
             <div class="vehicle-grid">
               <section class="panel">
                 <h3>Battery & Range</h3>
