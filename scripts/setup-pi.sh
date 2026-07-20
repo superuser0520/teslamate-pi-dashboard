@@ -34,6 +34,11 @@ grep -q '^DASHBOARD_PORT=' .env || echo 'DASHBOARD_PORT=8080' >> .env
 grep -q '^DASHBOARD_TOKEN=' .env || echo 'DASHBOARD_TOKEN=' >> .env
 grep -q '^CLOUDFLARED_TOKEN=' .env || echo 'CLOUDFLARED_TOKEN=' >> .env
 
+if grep -q '^GRAFANA_PORT=3000$' .env; then
+  sed -i 's/^GRAFANA_PORT=3000$/GRAFANA_PORT=3001/' .env
+  echo "Moved Grafana from port 3000 to 3001 to avoid common port conflicts."
+fi
+
 mkdir -p import backups
 
 docker compose pull
@@ -46,7 +51,7 @@ dashboard_port="$(grep -E '^DASHBOARD_PORT=' .env | cut -d= -f2 || true)"
 echo
 echo "TeslaMate is starting."
 echo "TeslaMate: http://${pi_ip}:${teslamate_port:-4000}"
-echo "Grafana:    http://${pi_ip}:${grafana_port:-3000}"
+echo "Grafana:    http://${pi_ip}:${grafana_port:-3001}"
 echo "Dashboard:  http://${pi_ip}:${dashboard_port:-8080}"
 echo
 echo "Grafana default login is admin / admin. Change it on first login."

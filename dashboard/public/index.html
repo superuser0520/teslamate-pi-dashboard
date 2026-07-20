@@ -3,19 +3,24 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f2f2f7">
     <title>TeslaMate Dashboard</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
     <header class="topbar">
       <div>
-        <p class="eyebrow">TeslaMate</p>
-        <h1>Vehicle Dashboard</h1>
+        <p class="eyebrow">TeslaMate Garage</p>
+        <h1>Today</h1>
       </div>
       <div class="status-pill" id="connectionStatus">Connecting</div>
     </header>
 
     <main>
+      <section class="section-title">
+        <h2>Overview</h2>
+      </section>
+
       <section class="summary-grid" id="summaryGrid" aria-live="polite">
         <article class="metric">
           <span>Vehicles</span>
@@ -31,6 +36,10 @@
         </article>
       </section>
 
+      <section class="section-title">
+        <h2>Vehicles</h2>
+      </section>
+
       <section class="vehicle-list" id="vehicleList"></section>
 
       <section class="empty-state" id="emptyState" hidden>
@@ -42,4 +51,3 @@
     <script src="/app.js" defer></script>
   </body>
 </html>
-

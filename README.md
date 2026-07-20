@@ -5,7 +5,7 @@ This folder contains a Raspberry Pi-ready TeslaMate setup for viewing Tesla data
 ## What You Get
 
 - TeslaMate web app on port `4000`
-- Grafana dashboards on port `3000`
+- Grafana dashboards on port `3001`
 - Simple live dashboard on port `8080`
 - PostgreSQL storage
 - Mosquitto MQTT broker for TeslaMate integrations
@@ -44,7 +44,7 @@ http://<raspberry-pi-ip>:4000
 6. Open Grafana dashboards:
 
 ```text
-http://<raspberry-pi-ip>:3000
+http://<raspberry-pi-ip>:3001
 ```
 
 Grafana starts with `admin` / `admin`; change the password when prompted.
@@ -67,7 +67,7 @@ After the stack starts:
 2. Follow the TeslaMate login flow in the browser.
 3. Complete Tesla multi-factor authentication if prompted.
 4. Wait for TeslaMate to discover your vehicle.
-5. Open Grafana at `http://<raspberry-pi-ip>:3000` for the full dashboards.
+5. Open Grafana at `http://<raspberry-pi-ip>:3001` for the full dashboards.
 6. Open the simple dashboard at `http://<raspberry-pi-ip>:8080` for a quick live view.
 
 TeslaMate stores Tesla API tokens encrypted in PostgreSQL using `ENCRYPTION_KEY` from `.env`. Keep that `.env` file backed up somewhere private; losing it can make stored tokens unreadable.
