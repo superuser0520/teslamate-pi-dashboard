@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TeslaMate Dashboard</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">TeslaMate</p>
+        <h1>Vehicle Dashboard</h1>
+      </div>
+      <div class="status-pill" id="connectionStatus">Connecting</div>
+    </header>
+
+    <main>
+      <section class="summary-grid" id="summaryGrid" aria-live="polite">
+        <article class="metric">
+          <span>Vehicles</span>
+          <strong id="vehicleCount">-</strong>
+        </article>
+        <article class="metric">
+          <span>Last Refresh</span>
+          <strong id="lastRefresh">-</strong>
+        </article>
+        <article class="metric">
+          <span>Database</span>
+          <strong id="databaseStatus">-</strong>
+        </article>
+      </section>
+
+      <section class="vehicle-list" id="vehicleList"></section>
+
+      <section class="empty-state" id="emptyState" hidden>
+        <h2>No vehicle data yet</h2>
+        <p>Sign in to TeslaMate first, then wait for the first vehicle update. This dashboard will populate automatically.</p>
+      </section>
+    </main>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>
+

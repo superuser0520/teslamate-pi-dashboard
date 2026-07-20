@@ -1,0 +1,5 @@
+.env
+backups/
+dashboard/node_modules/
+import/*
+!import/.gitkeep

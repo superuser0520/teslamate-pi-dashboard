@@ -1,0 +1,95 @@
+services:
+  teslamate:
+    image: teslamate/teslamate:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      DATABASE_USER: ${DATABASE_USER:-teslamate}
+      DATABASE_PASS: ${POSTGRES_PASSWORD}
+      DATABASE_NAME: ${DATABASE_NAME:-teslamate}
+      DATABASE_HOST: ${DATABASE_HOST:-database}
+      MQTT_HOST: ${MQTT_HOST:-mosquitto}
+    ports:
+      - "${TESLAMATE_PORT:-4000}:4000"
+    volumes:
+      - ./import:/opt/app/import
+    cap_drop:
+      - all
+    depends_on:
+      database:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+
+  database:
+    image: postgres:18-trixie
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DATABASE_USER:-teslamate}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME:-teslamate}
+    volumes:
+      - teslamate-db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-teslamate} -d ${DATABASE_NAME:-teslamate}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  grafana:
+    image: teslamate/grafana:latest
+    restart: unless-stopped
+    environment:
+      DATABASE_USER: ${DATABASE_USER:-teslamate}
+      DATABASE_PASS: ${POSTGRES_PASSWORD}
+      DATABASE_NAME: ${DATABASE_NAME:-teslamate}
+      DATABASE_HOST: ${DATABASE_HOST:-database}
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - teslamate-grafana-data:/var/lib/grafana
+    depends_on:
+      database:
+        condition: service_healthy
+
+  dashboard:
+    build:
+      context: ./dashboard
+    restart: unless-stopped
+    environment:
+      PORT: 8080
+      DATABASE_USER: ${DATABASE_USER:-teslamate}
+      DATABASE_PASS: ${POSTGRES_PASSWORD}
+      DATABASE_NAME: ${DATABASE_NAME:-teslamate}
+      DATABASE_HOST: ${DATABASE_HOST:-database}
+      DASHBOARD_TOKEN: ${DASHBOARD_TOKEN:-}
+    ports:
+      - "${DASHBOARD_PORT:-8080}:8080"
+    depends_on:
+      database:
+        condition: service_healthy
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    command: mosquitto -c /mosquitto-no-auth.conf
+    volumes:
+      - mosquitto-conf:/mosquitto/config
+      - mosquitto-data:/mosquitto/data
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    profiles:
+      - tunnel
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARED_TOKEN:-}
+    depends_on:
+      - dashboard
+
+volumes:
+  teslamate-db:
+  teslamate-grafana-data:
+  mosquitto-conf:
+  mosquitto-data:
