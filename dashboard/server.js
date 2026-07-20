@@ -202,7 +202,7 @@ async function getLatestState(client, carId) {
   return rows[0] || null;
 }
 
-async function getRecentChargeSessions(client, carId) {
+async function getRecentChargeSessions(client, carId, limit = 60) {
   const columns = await tableColumns(client, "charging_processes");
   if (!columns.size) {
     return [];
@@ -228,11 +228,11 @@ async function getRecentChargeSessions(client, carId) {
   const params = columns.has("car_id") ? [carId] : [];
   const { rows } = await client.query(
     `select ${fields}
-       from "charging_processes"
+      from "charging_processes"
       ${whereSql}
       order by "${dateColumn}" desc
       limit $${params.length + 1}`,
-    [...params, 8]
+    [...params, limit]
   );
 
   return rows;
@@ -339,7 +339,7 @@ async function getDashboard() {
         "inside_temp_avg",
         "speed_max",
         "power_max"
-      ], "start_date", carWhere, [car.id], 8);
+      ], "start_date", carWhere, [car.id], 180);
 
       const chargingProcess = await getLatestChargeProcess(client, car.id);
       const recentCharges = await getRecentChargeSessions(client, car.id);

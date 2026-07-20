@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#f2f2f7">
+    <meta name="theme-color" content="#f5f7fb">
     <title>TeslaMate Dashboard</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
@@ -22,30 +22,23 @@
     <main>
       <section class="hero">
         <p class="eyebrow">Private Tesla analytics</p>
-        <h1>Your TeslaMate, made pocket friendly.</h1>
-        <p class="hero-copy">A clean live view for your self-hosted TeslaMate server, tuned for quick checks from any device on your network.</p>
+        <h1 id="pageTitle">Overview</h1>
+        <p class="hero-copy" id="pageSubtitle">Your self-hosted Tesla companion, tuned for quick checks from any device.</p>
         <div class="quick-actions" aria-label="Quick links">
           <a id="teslamateLink" href="/api/health" target="_blank" rel="noreferrer">TeslaMate</a>
           <a id="grafanaLink" href="/api/health" target="_blank" rel="noreferrer">Grafana</a>
           <a href="/api/health" target="_blank" rel="noreferrer">Health</a>
         </div>
-        <div class="summary-grid" id="summaryGrid" aria-live="polite">
-          <article class="metric">
-            <span>Vehicles</span>
-            <strong id="vehicleCount">-</strong>
-          </article>
-          <article class="metric">
-            <span>Last Refresh</span>
-            <strong id="lastRefresh">-</strong>
-          </article>
-          <article class="metric">
-            <span>Database</span>
-            <strong id="databaseStatus">-</strong>
-          </article>
-        </div>
       </section>
 
-      <section class="vehicle-list" id="vehicleList"></section>
+      <nav class="tabbar" aria-label="Dashboard tabs">
+        <button class="tab-button active" type="button" data-tab="overview">Overview</button>
+        <button class="tab-button" type="button" data-tab="trips">Trips</button>
+        <button class="tab-button" type="button" data-tab="charging">Charging</button>
+        <button class="tab-button" type="button" data-tab="settings">Settings</button>
+      </nav>
+
+      <section class="view-shell" id="appView" aria-live="polite"></section>
 
       <section class="empty-state" id="emptyState" hidden>
         <h2>No vehicle data yet</h2>
