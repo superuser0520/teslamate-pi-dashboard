@@ -27,7 +27,7 @@ Keep this on your home network or behind a secure remote-access layer such as Ta
 ```bash
 sudo mkdir -p /opt
 cd /opt
-sudo git clone <your-github-repo-url> teslamate
+sudo git clone https://github.com/superuser0520/teslamate-pi-dashboard.git teslamate
 sudo chown -R "$USER":"$USER" /opt/teslamate
 cd /opt/teslamate
 chmod +x scripts/*.sh
