@@ -65,6 +65,11 @@ async function maybeLatest(client, tableName, wantedColumns, whereSql = "", para
     return null;
   }
 
+  if (whereSql.includes('"car_id"') && !columns.has("car_id")) {
+    whereSql = "";
+    params = [];
+  }
+
   const fields = selectList(columns, wantedColumns);
   if (!fields) {
     return null;
@@ -86,6 +91,11 @@ async function maybeRecent(client, tableName, wantedColumns, dateColumn, whereSq
   const columns = await tableColumns(client, tableName);
   if (!columns.size || !columns.has(dateColumn)) {
     return [];
+  }
+
+  if (whereSql.includes('"car_id"') && !columns.has("car_id")) {
+    whereSql = "";
+    params = [];
   }
 
   const fields = selectList(columns, wantedColumns);
