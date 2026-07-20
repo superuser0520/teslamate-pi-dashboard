@@ -749,14 +749,7 @@ async function fetchDashboard() {
   let response = await fetch("/api/dashboard", { cache: "no-store", headers });
 
   if (response.status === 401) {
-    const entered = window.prompt("Dashboard token");
-    if (entered) {
-      localStorage.setItem(tokenStorageKey, entered);
-      response = await fetch("/api/dashboard", {
-        cache: "no-store",
-        headers: { Authorization: `Bearer ${entered}` }
-      });
-    }
+    window.location.href = "/login";
   }
 
   return response;

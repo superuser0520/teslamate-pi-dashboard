@@ -1,12 +1,18 @@
 import express from "express";
 import pg from "pg";
 import path from "node:path";
+import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 const { Pool } = pg;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 8080);
 const dashboardToken = process.env.DASHBOARD_TOKEN || "";
+const dashboardUsername = process.env.DASHBOARD_USERNAME || "soolihjing@icloud.com";
+const defaultPasswordHash = "a963512a6a78060c4ec324cd7ba05485:4707ce4138e9f915e70595b4ff2fe37b37da9a80337bf036550b4c2c15cd1d38380b9f45aaae77ed6b149ac4cadfd96f3c5f7513bed8fbf15d24db3e1c1817cf";
+const dashboardPasswordHash = process.env.DASHBOARD_PASSWORD_HASH || defaultPasswordHash;
+const sessionSecret = process.env.DASHBOARD_SESSION_SECRET || process.env.ENCRYPTION_KEY || process.env.POSTGRES_PASSWORD || "change-this-dashboard-secret";
+const sessionCookie = "tm_dashboard_session";
 
 const pool = new Pool({
   host: process.env.DATABASE_HOST || "database",
@@ -19,27 +25,131 @@ const pool = new Pool({
 });
 
 const app = express();
+app.set("trust proxy", true);
 app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: false }));
 
-app.use(express.static(path.join(__dirname, "public"), {
-  extensions: ["html"],
-  maxAge: "5m"
-}));
+function parseCookies(req) {
+  return Object.fromEntries((req.headers.cookie || "").split(";").filter(Boolean).map((part) => {
+    const [key, ...rest] = part.trim().split("=");
+    return [decodeURIComponent(key), decodeURIComponent(rest.join("="))];
+  }));
+}
 
-app.use("/api", (req, res, next) => {
-  if (!dashboardToken) {
-    next();
+function signSession(payload) {
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const sig = crypto.createHmac("sha256", sessionSecret).update(body).digest("base64url");
+  return `${body}.${sig}`;
+}
+
+function readSession(req) {
+  const token = parseCookies(req)[sessionCookie];
+  if (!token || !token.includes(".")) return null;
+  const [body, sig] = token.split(".");
+  const expected = crypto.createHmac("sha256", sessionSecret).update(body).digest("base64url");
+  if (Buffer.byteLength(sig) !== Buffer.byteLength(expected)) return null;
+  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+    if (payload.exp && Date.now() > payload.exp) return null;
+    if (payload.username !== dashboardUsername) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+function verifyPassword(password) {
+  const [salt, stored] = dashboardPasswordHash.split(":");
+  if (!salt || !stored) return false;
+  const candidate = crypto.scryptSync(password, salt, 64).toString("hex");
+  if (Buffer.byteLength(candidate, "hex") !== Buffer.byteLength(stored, "hex")) return false;
+  return crypto.timingSafeEqual(Buffer.from(candidate, "hex"), Buffer.from(stored, "hex"));
+}
+
+function hasBearerAccess(req) {
+  return dashboardToken && req.get("authorization") === `Bearer ${dashboardToken}`;
+}
+
+function isAuthenticated(req) {
+  return hasBearerAccess(req) || Boolean(readSession(req));
+}
+
+function setSessionCookie(res, remember) {
+  const maxAge = remember ? 1000 * 60 * 60 * 24 * 30 : undefined;
+  const exp = remember ? Date.now() + maxAge : undefined;
+  const token = signSession({ username: dashboardUsername, exp });
+  const parts = [
+    `${sessionCookie}=${encodeURIComponent(token)}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax"
+  ];
+  if (maxAge) parts.push(`Max-Age=${Math.floor(maxAge / 1000)}`);
+  if (process.env.DASHBOARD_SECURE_COOKIE === "true") parts.push("Secure");
+  res.setHeader("Set-Cookie", parts.join("; "));
+}
+
+function clearSessionCookie(res) {
+  res.setHeader("Set-Cookie", `${sessionCookie}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+}
+
+app.get("/login", (req, res) => {
+  if (isAuthenticated(req)) {
+    res.redirect("/");
+    return;
+  }
+  res.sendFile(path.join(__dirname, "public", "login.html"));
+});
+
+app.post("/login", (req, res) => {
+  const username = String(req.body.username || "").trim().toLowerCase();
+  const password = String(req.body.password || "");
+  const remember = req.body.remember === "on";
+
+  if (username === dashboardUsername.toLowerCase() && verifyPassword(password)) {
+    setSessionCookie(res, remember);
+    res.redirect("/");
     return;
   }
 
-  const expected = `Bearer ${dashboardToken}`;
-  if (req.get("authorization") === expected) {
+  res.redirect("/login?error=1");
+});
+
+app.post("/logout", (_req, res) => {
+  clearSessionCookie(res);
+  res.redirect("/login");
+});
+
+app.use((req, res, next) => {
+  if (req.path === "/login" || req.path === "/styles.css" || req.path === "/manifest.webmanifest") {
+    next();
+    return;
+  }
+  if (isAuthenticated(req)) {
+    next();
+    return;
+  }
+  if (req.path.startsWith("/api/")) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  res.redirect("/login");
+});
+
+app.use("/api", (req, res, next) => {
+  if (isAuthenticated(req)) {
     next();
     return;
   }
 
   res.status(401).json({ error: "Unauthorized" });
 });
+
+app.use(express.static(path.join(__dirname, "public"), {
+  extensions: ["html"],
+  maxAge: "5m"
+}));
 
 async function tableColumns(client, tableName) {
   const { rows } = await client.query(

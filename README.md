@@ -57,6 +57,18 @@ http://<raspberry-pi-ip>:8080
 
 The dashboard shows vehicle status, battery, range, charging, recent charge sessions, recent drives, 30-day statistics, climate, location, odometer, and self-hosted system status from the TeslaMate database.
 
+The dashboard login defaults to:
+
+```text
+Username: soolihjing@icloud.com
+```
+
+The default password is built into the dashboard as a hash. To change it, generate a new hash locally and set `DASHBOARD_PASSWORD_HASH` in `.env`:
+
+```bash
+node -e "const crypto=require('crypto'); const salt=crypto.randomBytes(16).toString('hex'); const hash=crypto.scryptSync('new-password-here', salt, 64).toString('hex'); console.log(salt+':'+hash)"
+```
+
 ## Tesla Account Setup
 
 TeslaMate needs your Tesla account authorization so it can collect vehicle telemetry. Do not put Tesla credentials in `.env`, GitHub, Docker Compose, or this dashboard.
@@ -108,7 +120,7 @@ nano .env
 docker compose up -d
 ```
 
-If you set `DASHBOARD_TOKEN` in `.env`, the dashboard will ask for it in the browser and use it for API requests.
+The dashboard uses a signed login cookie. Set `DASHBOARD_SESSION_SECRET` in `.env` before hosting publicly. `DASHBOARD_TOKEN` is still supported for API clients that send `Authorization: Bearer <token>`.
 
 ## Cloudflare Tunnel
 

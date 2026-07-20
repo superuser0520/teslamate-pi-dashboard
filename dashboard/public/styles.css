@@ -113,8 +113,13 @@ body {
   gap: 8px;
 }
 
+.top-actions form {
+  margin: 0;
+}
+
 .privacy-pill,
-.status-pill {
+.status-pill,
+.logout-button {
   display: inline-flex;
   min-height: 32px;
   align-items: center;
@@ -127,6 +132,12 @@ body {
   font-size: 13px;
   font-weight: 750;
   white-space: nowrap;
+}
+
+.logout-button {
+  border: 0;
+  cursor: pointer;
+  font: inherit;
 }
 
 .privacy-pill::before,
@@ -1041,6 +1052,103 @@ body[data-density="compact"] .vehicle-hero {
   margin-bottom: 0;
   color: var(--muted);
   line-height: 1.45;
+}
+
+.login-page {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+}
+
+.login-shell {
+  display: grid;
+  width: min(520px, 100%);
+  padding: clamp(18px, 5vw, 42px);
+}
+
+.login-card {
+  display: grid;
+  gap: 16px;
+  border-radius: 28px;
+  padding: clamp(22px, 5vw, 34px);
+  background: var(--surface);
+  box-shadow: var(--inner), var(--shadow), var(--glow);
+  backdrop-filter: blur(18px) saturate(150%);
+}
+
+.login-brand {
+  margin-bottom: 8px;
+}
+
+.login-card h1 {
+  font-size: clamp(42px, 10vw, 72px);
+}
+
+.login-form {
+  display: grid;
+  gap: 14px;
+}
+
+.login-form label {
+  display: grid;
+  gap: 7px;
+}
+
+.login-form label > span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.login-form input[type="email"],
+.login-form input[type="password"] {
+  width: 100%;
+  min-height: 52px;
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  padding: 0 14px;
+  background: rgba(5, 7, 12, 0.72);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 750;
+}
+
+.remember-row {
+  display: flex !important;
+  grid-template-columns: none;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px !important;
+  padding: 4px 0;
+}
+
+.remember-row input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--blue);
+}
+
+.login-form button {
+  min-height: 52px;
+  border: 0;
+  border-radius: 17px;
+  color: #061018;
+  background: var(--blue);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+  box-shadow: 0 0 24px rgba(83, 199, 255, 0.3);
+}
+
+.login-error {
+  margin: 0;
+  border-radius: 14px;
+  padding: 12px 14px;
+  color: #ffd4d1;
+  background: rgba(255, 93, 85, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 93, 85, 0.24);
+  font-size: 14px;
+  font-weight: 750;
 }
 
 @media (max-width: 860px) {
