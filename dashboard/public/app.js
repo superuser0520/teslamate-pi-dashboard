@@ -33,10 +33,30 @@ const escapeHtml = (input) => String(input ?? "-").replace(/[&<>"']/g, (char) =>
   "'": "&#039;"
 })[char]);
 const value = (input) => escapeHtml(input ?? "-");
-const number = (input, digits = 0) => typeof input === "number" ? input.toFixed(digits) : "-";
-const fixed = (input, suffix = "", digits = 0) => typeof input === "number" ? `${input.toFixed(digits)}${suffix}` : "-";
-const temperature = (input) => typeof input === "number" ? `${input.toFixed(1)} C` : "Not reported";
-const elevation = (input) => typeof input === "number" ? `${input.toFixed(0)} m` : "Not recorded";
+const toNumber = (input) => {
+  if (typeof input === "number" && Number.isFinite(input)) return input;
+  if (typeof input === "string" && input.trim() !== "") {
+    const parsed = Number(input);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+};
+const number = (input, digits = 0) => {
+  const parsed = toNumber(input);
+  return parsed === null ? "-" : parsed.toFixed(digits);
+};
+const fixed = (input, suffix = "", digits = 0) => {
+  const parsed = toNumber(input);
+  return parsed === null ? "-" : `${parsed.toFixed(digits)}${suffix}`;
+};
+const temperature = (input) => {
+  const parsed = toNumber(input);
+  return parsed === null ? "Not reported" : `${parsed.toFixed(1)} C`;
+};
+const elevation = (input) => {
+  const parsed = toNumber(input);
+  return parsed === null ? "Not recorded" : `${parsed.toFixed(0)} m`;
+};
 const dateTime = (input) => input ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(input)) : "-";
 const shortDate = (input) => input ? new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(input)) : "-";
 const timeOnly = (input) => input ? new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(input)) : "-";
@@ -65,21 +85,24 @@ function currencyMeta() {
 }
 
 function distance(km, digits = 1) {
-  if (typeof km !== "number") return "-";
-  if (settings.distanceUnit === "km") return `${km.toFixed(digits)} km`;
-  return `${(km * 0.621371).toFixed(digits)} mi`;
+  const parsed = toNumber(km);
+  if (parsed === null) return "-";
+  if (settings.distanceUnit === "km") return `${parsed.toFixed(digits)} km`;
+  return `${(parsed * 0.621371).toFixed(digits)} mi`;
 }
 
 function speed(valueInMph) {
-  if (typeof valueInMph !== "number") return "-";
-  if (settings.distanceUnit === "km") return `${(valueInMph * 1.60934).toFixed(0)} km/h`;
-  return `${valueInMph.toFixed(0)} mph`;
+  const parsed = toNumber(valueInMph);
+  if (parsed === null) return "-";
+  if (settings.distanceUnit === "km") return `${(parsed * 1.60934).toFixed(0)} km/h`;
+  return `${parsed.toFixed(0)} mph`;
 }
 
 function money(input) {
-  if (typeof input !== "number") return "-";
+  const parsed = toNumber(input);
+  if (parsed === null) return "-";
   const meta = currencyMeta();
-  return `${meta.symbol}${input.toFixed(2)}`;
+  return `${meta.symbol}${parsed.toFixed(2)}`;
 }
 
 function wireServiceLinks() {
@@ -89,9 +112,10 @@ function wireServiceLinks() {
 }
 
 function batteryClass(percent) {
-  if (typeof percent !== "number") return "";
-  if (percent < 20) return "low";
-  if (percent < 50) return "medium";
+  const parsed = toNumber(percent);
+  if (parsed === null) return "";
+  if (parsed < 20) return "low";
+  if (parsed < 50) return "medium";
   return "";
 }
 
@@ -144,6 +168,7 @@ function renderSummary(cars) {
 function renderVehicleHero(snapshot) {
   const { car, position, charge } = snapshot;
   const battery = position?.battery_level ?? position?.soc ?? charge?.battery_level;
+  const batteryNumber = toNumber(battery);
   const model = [car.model, car.trim_badging].filter(Boolean).join(" ") || "Vehicle";
   const lastDate = position?.date || charge?.date || car.updated_at;
 
@@ -160,7 +185,7 @@ function renderVehicleHero(snapshot) {
         <div class="car-glass"></div>
       </div>
       <div class="hero-stats">
-        <div><span>${typeof battery === "number" ? `${battery}%` : "-"}</span><small>Battery</small></div>
+        <div><span>${batteryNumber === null ? "-" : `${batteryNumber}%`}</span><small>Battery</small></div>
         <div><span>${distance(position?.est_battery_range)}</span><small>Range</small></div>
         <div><span>${value(vehicleState(snapshot))}</span><small>Status</small></div>
       </div>
@@ -175,7 +200,8 @@ function renderOverview(cars) {
       ${cars.map((snapshot) => {
         const { car, position, charge, latestChargingProcess, stats = {} } = snapshot;
         const battery = position?.battery_level ?? position?.soc ?? charge?.battery_level;
-        const fillWidth = typeof battery === "number" ? Math.max(0, Math.min(100, battery)) : 0;
+        const batteryNumber = toNumber(battery);
+        const fillWidth = batteryNumber === null ? 0 : Math.max(0, Math.min(100, batteryNumber));
         return `
           <article class="vehicle">
             ${renderVehicleHero(snapshot)}
@@ -185,7 +211,7 @@ function renderOverview(cars) {
                 <div class="battery-wrap">
                   <div class="battery">
                     <div class="battery-fill ${batteryClass(battery)}" style="width:${fillWidth}%"></div>
-                    <div class="battery-percent">${typeof battery === "number" ? `${battery}%` : "-"}</div>
+                    <div class="battery-percent">${batteryNumber === null ? "-" : `${batteryNumber}%`}</div>
                   </div>
                   <div class="kv-grid">
                     ${renderKv("Estimated Range", distance(position?.est_battery_range))}
@@ -250,7 +276,7 @@ function renderTrips(cars) {
         <details class="month-group" open>
           <summary>
             <span>${value(month)}</span>
-            <strong>${distance(drives.reduce((sum, drive) => sum + (drive.distance || 0), 0))}</strong>
+            <strong>${distance(drives.reduce((sum, drive) => sum + (toNumber(drive.distance) || 0), 0))}</strong>
           </summary>
           <div class="row-list">
             ${drives.map((drive) => `
@@ -287,7 +313,7 @@ function renderCharging(cars) {
         <details class="month-group" open>
           <summary>
             <span>${value(month)}</span>
-            <strong>${fixed(charges.reduce((sum, chargeSession) => sum + (chargeSession.charge_energy_added || 0), 0), " kWh", 1)}</strong>
+            <strong>${fixed(charges.reduce((sum, chargeSession) => sum + (toNumber(chargeSession.charge_energy_added) || 0), 0), " kWh", 1)}</strong>
           </summary>
           <div class="row-list">
             ${charges.map((chargeSession) => `
