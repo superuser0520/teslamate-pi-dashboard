@@ -32,6 +32,13 @@ const escapeHtml = (input) => String(input ?? "-").replace(/[&<>"']/g, (char) =>
   "\"": "&quot;",
   "'": "&#039;"
 })[char]);
+const themeOptions = [
+  { code: "ios", label: "iOS Glass" },
+  { code: "cyber", label: "Cyber Blue" },
+  { code: "tesla", label: "Tesla Red" },
+  { code: "aurora", label: "Aurora" },
+  { code: "night", label: "Night" }
+];
 const value = (input) => escapeHtml(input ?? "-");
 const toNumber = (input) => {
   if (typeof input === "number" && Number.isFinite(input)) return input;
@@ -67,17 +74,25 @@ function loadSettings() {
     return {
       distanceUnit: "mi",
       currency: "USD",
+      theme: "ios",
+      density: "comfortable",
       ...JSON.parse(localStorage.getItem(settingsStorageKey) || "{}")
     };
   } catch {
-    return { distanceUnit: "mi", currency: "USD" };
+    return { distanceUnit: "mi", currency: "USD", theme: "ios", density: "comfortable" };
   }
 }
 
 function saveSettings(nextSettings) {
   settings = { ...settings, ...nextSettings };
   localStorage.setItem(settingsStorageKey, JSON.stringify(settings));
+  applyTheme();
   render();
+}
+
+function applyTheme() {
+  document.body.dataset.theme = settings.theme || "ios";
+  document.body.dataset.density = settings.density || "comfortable";
 }
 
 function currencyMeta() {
@@ -96,6 +111,30 @@ function speed(valueInMph) {
   if (parsed === null) return "-";
   if (settings.distanceUnit === "km") return `${(parsed * 1.60934).toFixed(0)} km/h`;
   return `${parsed.toFixed(0)} mph`;
+}
+
+function rangeValue(position, charge, type = "est") {
+  const keys = type === "ideal"
+    ? ["ideal_battery_range", "ideal_battery_range_km", "rated_battery_range", "rated_battery_range_km"]
+    : ["est_battery_range", "est_battery_range_km", "rated_battery_range", "rated_battery_range_km"];
+  for (const key of keys) {
+    const parsed = toNumber(position?.[key] ?? charge?.[key]);
+    if (parsed !== null) return parsed;
+  }
+  return null;
+}
+
+function duration(start, end, fallbackMin) {
+  const fallback = toNumber(fallbackMin);
+  if (fallback !== null) return `${fallback.toFixed(0)} min`;
+  if (!start || !end) return "-";
+  const minutes = Math.max(0, (new Date(end) - new Date(start)) / 60000);
+  return `${minutes.toFixed(0)} min`;
+}
+
+function percent(input) {
+  const parsed = toNumber(input);
+  return parsed === null ? "-" : `${parsed.toFixed(0)}%`;
 }
 
 function money(input) {
@@ -132,9 +171,90 @@ function vehicleState(snapshot) {
 }
 
 function mapLink(position) {
-  if (!position?.latitude || !position?.longitude) return "-";
+  if (position?.latitude == null || position?.longitude == null) return "-";
   const href = `https://www.google.com/maps/search/?api=1&query=${position.latitude},${position.longitude}`;
   return `<a class="map-link" href="${href}" target="_blank" rel="noreferrer">Open map</a>`;
+}
+
+function pointSeries(rows, key) {
+  return (rows || [])
+    .map((row) => ({ date: row.date, value: toNumber(row[key]) }))
+    .filter((row) => row.value !== null);
+}
+
+function renderSparkline(rows, key, label, suffix = "") {
+  const series = pointSeries(rows, key);
+  if (series.length < 2) return `<div class="chart-empty">Not enough ${value(label).toLowerCase()} data</div>`;
+
+  const values = series.map((item) => item.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const points = series.map((item, index) => {
+    const x = series.length === 1 ? 0 : (index / (series.length - 1)) * 100;
+    const y = 100 - ((item.value - min) / span) * 100;
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
+  }).join(" ");
+
+  return `
+    <div class="chart-card">
+      <div class="chart-head">
+        <span>${value(label)}</span>
+        <strong>${values.at(-1).toFixed(1)}${value(suffix)}</strong>
+      </div>
+      <svg class="sparkline" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <polyline points="${points}" />
+      </svg>
+      <div class="chart-scale"><span>${min.toFixed(1)}${value(suffix)}</span><span>${max.toFixed(1)}${value(suffix)}</span></div>
+    </div>
+  `;
+}
+
+function renderRoute(points) {
+  const clean = (points || []).filter((point) => point.latitude != null && point.longitude != null);
+  if (clean.length < 2) return `<div class="map-mini empty">Route not recorded</div>`;
+
+  const latitudes = clean.map((point) => toNumber(point.latitude)).filter((item) => item !== null);
+  const longitudes = clean.map((point) => toNumber(point.longitude)).filter((item) => item !== null);
+  const minLat = Math.min(...latitudes);
+  const maxLat = Math.max(...latitudes);
+  const minLon = Math.min(...longitudes);
+  const maxLon = Math.max(...longitudes);
+  const latSpan = maxLat - minLat || 1;
+  const lonSpan = maxLon - minLon || 1;
+  const route = clean.map((point) => {
+    const x = ((toNumber(point.longitude) - minLon) / lonSpan) * 100;
+    const y = 100 - ((toNumber(point.latitude) - minLat) / latSpan) * 100;
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
+  });
+  const first = route[0].split(",");
+  const last = route.at(-1).split(",");
+
+  return `
+    <div class="map-mini">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <polyline points="${route.join(" ")}" />
+        <circle cx="${first[0]}" cy="${first[1]}" r="2.8" class="start" />
+        <circle cx="${last[0]}" cy="${last[1]}" r="2.8" class="end" />
+      </svg>
+    </div>
+  `;
+}
+
+function renderSocHistory(snapshot) {
+  return renderSparkline(snapshot.socHistory || [], "battery_level", "SOC History", "%");
+}
+
+function renderBatteryHealth(snapshot) {
+  const health = snapshot.batteryHealth || {};
+  return `
+    <div class="insight-grid">
+      ${renderKv("Current 90%+ Range", distance(health.currentRangeKm))}
+      ${renderKv("First 90%+ Range", distance(health.originalRangeKm))}
+      ${renderKv("Estimated Change", health.degradationPercent == null ? "-" : `${number(health.degradationPercent, 1)}%`)}
+      ${renderKv("History Points", value((health.points || []).length))}
+    </div>
+  `;
 }
 
 function renderLocationCard(position) {
@@ -208,7 +328,7 @@ function renderVehicleHero(snapshot) {
       </div>
       <div class="hero-stats">
         <div><span>${batteryNumber === null ? "-" : `${batteryNumber}%`}</span><small>Battery</small></div>
-        <div><span>${distance(position?.est_battery_range)}</span><small>Range</small></div>
+        <div><span>${distance(rangeValue(position, charge))}</span><small>Range</small></div>
         <div><span>${value(vehicleState(snapshot))}</span><small>Status</small></div>
       </div>
     </section>
@@ -237,8 +357,8 @@ function renderOverview(cars) {
                     <div class="battery-percent">${batteryNumber === null ? "-" : `${batteryNumber}%`}</div>
                   </div>
                   <div class="kv-grid">
-                    ${renderKv("Estimated Range", distance(position?.est_battery_range))}
-                    ${renderKv("Ideal Range", distance(position?.ideal_battery_range ?? position?.rated_battery_range))}
+                    ${renderKv("Estimated Range", distance(rangeValue(position, charge)))}
+                    ${renderKv("Ideal Range", distance(rangeValue(position, charge, "ideal")))}
                     ${renderKv("Odometer", distance(position?.odometer))}
                     ${renderKv("30 Day Trips", distance(stats.monthDriveDistance))}
                     ${renderKv("Outside Temp", temperature(position?.outside_temp))}
@@ -277,6 +397,16 @@ function renderOverview(cars) {
                 ${renderKv("Refresh", "30 seconds")}
               </div>
             </section>
+            <section class="activity-grid">
+              <article class="panel">
+                <h3>SOC History</h3>
+                ${renderSocHistory(snapshot)}
+              </article>
+              <article class="panel">
+                <h3>Battery Health</h3>
+                ${renderBatteryHealth(snapshot)}
+              </article>
+            </section>
           </article>
         `;
       }).join("")}
@@ -303,16 +433,34 @@ function renderTrips(cars) {
           </summary>
           <div class="row-list">
             ${drives.map((drive) => `
-              <article class="data-row">
-                <div>
-                  <strong>${dateTime(drive.start_date)}</strong>
-                  <span>${value(drive.carName)}${drive.duration_min ? ` - ${number(drive.duration_min)} min` : ""}</span>
+              <details class="detail-row">
+                <summary class="data-row">
+                  <div>
+                    <strong>${dateTime(drive.start_date)}</strong>
+                    <span>${value(drive.carName)} - ${duration(drive.start_date, drive.end_date, drive.duration_min)}</span>
+                  </div>
+                  <div>
+                    <strong>${distance(drive.distance)}</strong>
+                    <span>${speed(drive.speed_max)}</span>
+                  </div>
+                </summary>
+                <div class="detail-body">
+                  ${renderRoute(drive.positions)}
+                  <div class="insight-grid">
+                    ${renderKv("Duration", duration(drive.start_date, drive.end_date, drive.duration_min))}
+                    ${renderKv("Max Speed", speed(drive.speed_max))}
+                    ${renderKv("Power Peak", fixed(drive.power_max, " kW"))}
+                    ${renderKv("Cabin Avg", temperature(drive.inside_temp_avg))}
+                    ${renderKv("Outside Avg", temperature(drive.outside_temp_avg))}
+                    ${renderKv("Range Used", distance((toNumber(drive.start_ideal_range_km) || 0) - (toNumber(drive.end_ideal_range_km) || 0)))}
+                  </div>
+                  <div class="chart-grid">
+                    ${renderSparkline(drive.positions, "speed", "Speed", settings.distanceUnit === "km" ? " mph" : " mph")}
+                    ${renderSparkline(drive.positions, "power", "Power", " kW")}
+                    ${renderSparkline(drive.positions, "elevation", "Elevation", " m")}
+                  </div>
                 </div>
-                <div>
-                  <strong>${distance(drive.distance)}</strong>
-                  <span>${speed(drive.speed_max)}</span>
-                </div>
-              </article>
+              </details>
             `).join("")}
           </div>
         </details>
@@ -340,16 +488,33 @@ function renderCharging(cars) {
           </summary>
           <div class="row-list">
             ${charges.map((chargeSession) => `
-              <article class="data-row">
-                <div>
-                  <strong>${dateTime(chargeSession.start_date)}</strong>
-                  <span>${value(chargeSession.carName)}${chargeSession.duration_min ? ` - ${number(chargeSession.duration_min)} min` : ""}</span>
+              <details class="detail-row">
+                <summary class="data-row">
+                  <div>
+                    <strong>${dateTime(chargeSession.start_date)}</strong>
+                    <span>${value(chargeSession.carName)} - ${duration(chargeSession.start_date, chargeSession.end_date, chargeSession.duration_min)}</span>
+                  </div>
+                  <div>
+                    <strong>${fixed(chargeSession.charge_energy_added, " kWh", 1)}</strong>
+                    <span>${money(chargeSession.cost)}</span>
+                  </div>
+                </summary>
+                <div class="detail-body">
+                  <div class="insight-grid">
+                    ${renderKv("Battery", `${percent(chargeSession.start_battery_level)} to ${percent(chargeSession.end_battery_level)}`)}
+                    ${renderKv("Energy Added", fixed(chargeSession.charge_energy_added, " kWh", 1))}
+                    ${renderKv("Energy Used", fixed(chargeSession.charge_energy_used, " kWh", 1))}
+                    ${renderKv("Cost", money(chargeSession.cost))}
+                    ${renderKv("Duration", duration(chargeSession.start_date, chargeSession.end_date, chargeSession.duration_min))}
+                    ${renderKv("Outside Avg", temperature(chargeSession.outside_temp_avg))}
+                  </div>
+                  <div class="chart-grid">
+                    ${renderSparkline(chargeSession.points, "battery_level", "Charge Level", "%")}
+                    ${renderSparkline(chargeSession.points, "charger_power", "Charge Power", " kW")}
+                    ${renderSparkline(chargeSession.points, "charger_voltage", "Voltage", " V")}
+                  </div>
                 </div>
-                <div>
-                  <strong>${fixed(chargeSession.charge_energy_added, " kWh", 1)}</strong>
-                  <span>${money(chargeSession.cost)}</span>
-                </div>
-              </article>
+              </details>
             `).join("")}
           </div>
         </details>
@@ -358,9 +523,53 @@ function renderCharging(cars) {
   `;
 }
 
+function activityLabel(item) {
+  if (item.type === "drive") return `Drive - ${distance(item.distance)}`;
+  if (item.type === "charge") return `Charge - ${fixed(item.charge_energy_added, " kWh", 1)}`;
+  return value(item.type);
+}
+
+function renderActivity(cars) {
+  const rows = cars.flatMap((snapshot) => (snapshot.timeline || []).map((item) => ({
+    ...item,
+    carName: snapshot.car.name || `Tesla ${snapshot.car.id}`
+  }))).sort((a, b) => new Date(b.start_date) - new Date(a.start_date));
+
+  return `
+    ${renderSummary(cars)}
+    <section class="activity-grid">
+      ${cars.map((snapshot) => `
+        <article class="panel">
+          <h3>${value(snapshot.car.name || `Tesla ${snapshot.car.id}`)} Analytics</h3>
+          <div class="chart-grid">
+            ${renderSocHistory(snapshot)}
+            ${renderSparkline(snapshot.batteryHealth?.points || [], "range_km", "90%+ Range", settings.distanceUnit === "km" ? " km" : " km")}
+          </div>
+          ${renderBatteryHealth(snapshot)}
+        </article>
+      `).join("")}
+      <article class="panel">
+        <h3>Activity Timeline</h3>
+        ${rows.length ? `<div class="timeline">${rows.map((item) => `
+          <div class="timeline-item ${value(item.type)}">
+            <span></span>
+            <div>
+              <strong>${activityLabel(item)}</strong>
+              <small>${value(item.carName)} - ${dateTime(item.start_date)}${item.end_date ? ` to ${timeOnly(item.end_date)}` : ""}</small>
+            </div>
+          </div>
+        `).join("")}</div>` : `<p class="small">No recent activity yet.</p>`}
+      </article>
+    </section>
+  `;
+}
+
 function renderSettings() {
   const options = currencyOptions.map((option) => (
     `<option value="${option.code}" ${settings.currency === option.code ? "selected" : ""}>${option.code} - ${option.label}</option>`
+  )).join("");
+  const themeSelectOptions = themeOptions.map((option) => (
+    `<option value="${option.code}" ${settings.theme === option.code ? "selected" : ""}>${option.label}</option>`
   )).join("");
 
   return `
@@ -379,6 +588,17 @@ function renderSettings() {
             <span><strong>Currency</strong><small>Changes the display symbol for TeslaMate cost values. It does not convert exchange rates.</small></span>
             <select id="currencySelect">${options}</select>
           </label>
+          <label class="setting-row">
+            <span><strong>Theme</strong><small>Changes the dashboard accent while keeping the iOS glass layout.</small></span>
+            <select id="themeSelect">${themeSelectOptions}</select>
+          </label>
+          <label class="setting-row">
+            <span><strong>Layout density</strong><small>Comfortable is best on phones. Compact shows more data on desktop.</small></span>
+            <select id="densitySelect">
+              <option value="comfortable" ${settings.density === "comfortable" ? "selected" : ""}>Comfortable</option>
+              <option value="compact" ${settings.density === "compact" ? "selected" : ""}>Compact</option>
+            </select>
+          </label>
         </div>
       </article>
       <article class="panel">
@@ -387,7 +607,9 @@ function renderSettings() {
           ${renderKv("TeslaMate", `<a class="map-link" href="${teslamateLinkEl.href}" target="_blank" rel="noreferrer">Open</a>`)}
           ${renderKv("Grafana", `<a class="map-link" href="${grafanaLinkEl.href}" target="_blank" rel="noreferrer">Open</a>`)}
           ${renderKv("API Health", `<a class="map-link" href="/api/health" target="_blank" rel="noreferrer">Check</a>`)}
-          ${renderKv("Data", "Self-hosted")}
+          ${renderKv("CyberUI APIs", `<a class="map-link" href="/api/v1/cars" target="_blank" rel="noreferrer">View</a>`)}
+          ${renderKv("Install", "Add to home screen")}
+          ${renderKv("Data", "Read-only")}
         </div>
       </article>
     </section>
@@ -399,6 +621,7 @@ function setPageCopy() {
     overview: ["Overview", "Your self-hosted Tesla companion, tuned for quick checks from any device."],
     trips: ["Trips", "Browse drive history grouped by month, with distance and speed in your preferred unit."],
     charging: ["Charging", "Review charge sessions by month, including energy and displayed cost."],
+    activity: ["Activity", "See SOC history, battery range trends, and recent vehicle timeline events."],
     settings: ["Settings", "Personalize units, currency display, and quick links for this browser."]
   };
   const [title, subtitle] = copy[activeTab] || copy.overview;
@@ -421,10 +644,13 @@ function render() {
   if (activeTab === "overview") appViewEl.innerHTML = renderOverview(cars);
   if (activeTab === "trips") appViewEl.innerHTML = renderTrips(cars);
   if (activeTab === "charging") appViewEl.innerHTML = renderCharging(cars);
+  if (activeTab === "activity") appViewEl.innerHTML = renderActivity(cars);
   if (activeTab === "settings") {
     appViewEl.innerHTML = renderSettings();
     document.querySelector("#distanceUnitSelect").addEventListener("change", (event) => saveSettings({ distanceUnit: event.target.value }));
     document.querySelector("#currencySelect").addEventListener("change", (event) => saveSettings({ currency: event.target.value }));
+    document.querySelector("#themeSelect").addEventListener("change", (event) => saveSettings({ theme: event.target.value }));
+    document.querySelector("#densitySelect").addEventListener("change", (event) => saveSettings({ density: event.target.value }));
   }
 }
 
@@ -474,6 +700,11 @@ tabButtons.forEach((button) => {
 });
 
 wireServiceLinks();
+applyTheme();
 render();
 loadDashboard();
 setInterval(loadDashboard, 30000);
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").catch(() => {});
+}

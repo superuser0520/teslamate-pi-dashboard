@@ -19,6 +19,7 @@ const pool = new Pool({
 });
 
 const app = express();
+app.use(express.json({ limit: "1mb" }));
 
 app.use(express.static(path.join(__dirname, "public"), {
   extensions: ["html"],
@@ -52,11 +53,27 @@ async function tableColumns(client, tableName) {
   return new Set(rows.map((row) => row.column_name));
 }
 
+async function hasTable(client, tableName) {
+  const { rows } = await client.query(
+    `select 1
+       from information_schema.tables
+      where table_schema = 'public'
+        and table_name = $1
+      limit 1`,
+    [tableName]
+  );
+  return rows.length > 0;
+}
+
 function selectList(columns, wanted) {
   return wanted
     .filter((column) => columns.has(column))
     .map((column) => `"${column}"`)
     .join(", ");
+}
+
+function columnExpr(columns, tableAlias, column, fallback = "null") {
+  return columns.has(column) ? `${tableAlias}."${column}"` : `${fallback} as "${column}"`;
 }
 
 async function maybeLatest(client, tableName, wantedColumns, whereSql = "", params = []) {
@@ -121,9 +138,15 @@ async function getCars(client) {
     "id",
     "eid",
     "vid",
+    "vin",
     "name",
     "model",
     "trim_badging",
+    "marketing_name",
+    "exterior_color",
+    "wheel_type",
+    "spoiler_type",
+    "display_priority",
     "efficiency",
     "inserted_at",
     "updated_at"
@@ -133,7 +156,8 @@ async function getCars(client) {
     return [];
   }
 
-  const { rows } = await client.query(`select ${fields} from "cars" order by "id"`);
+  const orderBy = columns.has("display_priority") ? `"display_priority" nulls last, "id"` : `"id"`;
+  const { rows } = await client.query(`select ${fields} from "cars" order by ${orderBy}`);
   return rows;
 }
 
@@ -213,11 +237,17 @@ async function getRecentChargeSessions(client, carId, limit = 60) {
     "id",
     "start_date",
     "end_date",
+    "address_id",
+    "geofence_id",
+    "position_id",
     "charge_energy_added",
+    "charge_energy_used",
     "cost",
     "duration_min",
     "start_battery_level",
     "end_battery_level",
+    "start_ideal_range_km",
+    "end_ideal_range_km",
     "outside_temp_avg"
   ]);
   if (!fields) {
@@ -239,7 +269,205 @@ async function getRecentChargeSessions(client, carId, limit = 60) {
 }
 
 function sumNumbers(rows, key) {
-  return rows.reduce((sum, row) => sum + (typeof row[key] === "number" ? row[key] : 0), 0);
+  return rows.reduce((sum, row) => {
+    const parsed = Number(row[key]);
+    return sum + (Number.isFinite(parsed) ? parsed : 0);
+  }, 0);
+}
+
+function sampleRows(rows, maxPoints = 120) {
+  if (rows.length <= maxPoints) return rows;
+  const stride = Math.ceil(rows.length / maxPoints);
+  return rows.filter((_, index) => index === 0 || index === rows.length - 1 || index % stride === 0);
+}
+
+async function getDrivePositions(client, driveId) {
+  const columns = await tableColumns(client, "positions");
+  if (!columns.has("drive_id") || !columns.has("date")) return [];
+
+  const fields = selectList(columns, [
+    "date",
+    "latitude",
+    "longitude",
+    "speed",
+    "power",
+    "battery_level",
+    "elevation",
+    "outside_temp",
+    "inside_temp",
+    "tpms_pressure_fl",
+    "tpms_pressure_fr",
+    "tpms_pressure_rl",
+    "tpms_pressure_rr"
+  ]);
+  if (!fields) return [];
+
+  const { rows } = await client.query(
+    `select ${fields}
+       from "positions"
+      where "drive_id" = $1
+      order by "date" asc`,
+    [driveId]
+  );
+
+  return sampleRows(rows, 160);
+}
+
+async function getChargePoints(client, chargeProcessId) {
+  const columns = await tableColumns(client, "charges");
+  if (!columns.has("charging_process_id") || !columns.has("date")) return [];
+
+  const fields = selectList(columns, [
+    "date",
+    "battery_level",
+    "usable_battery_level",
+    "charger_power",
+    "charger_voltage",
+    "charger_actual_current",
+    "ideal_battery_range_km",
+    "rated_battery_range_km",
+    "outside_temp"
+  ]);
+  if (!fields) return [];
+
+  const { rows } = await client.query(
+    `select ${fields}
+       from "charges"
+      where "charging_process_id" = $1
+      order by "date" asc`,
+    [chargeProcessId]
+  );
+
+  return sampleRows(rows, 160);
+}
+
+async function attachDriveDetails(client, drives, limit = 24) {
+  return Promise.all(drives.map(async (drive, index) => ({
+    ...drive,
+    positions: index < limit ? await getDrivePositions(client, drive.id) : []
+  })));
+}
+
+async function attachChargeDetails(client, charges, limit = 24) {
+  return Promise.all(charges.map(async (charge, index) => ({
+    ...charge,
+    points: index < limit ? await getChargePoints(client, charge.id) : []
+  })));
+}
+
+async function getSocHistory(client, carId, hours = 168) {
+  const points = [];
+  const positionColumns = await tableColumns(client, "positions");
+  if (positionColumns.has("date") && (positionColumns.has("battery_level") || positionColumns.has("soc"))) {
+    const batteryColumn = positionColumns.has("battery_level") ? "battery_level" : "soc";
+    const rangeColumn = positionColumns.has("rated_battery_range_km") ? "rated_battery_range_km" : null;
+    const where = positionColumns.has("car_id")
+      ? `where "car_id" = $1 and "date" >= now() - ($2 || ' hours')::interval`
+      : `where "date" >= now() - ($1 || ' hours')::interval`;
+    const params = positionColumns.has("car_id") ? [carId, hours] : [hours];
+    const { rows } = await client.query(
+      `select "date", "${batteryColumn}" as "battery_level"${rangeColumn ? `, "${rangeColumn}" as "range_km"` : `, null as "range_km"`}
+         from "positions"
+        ${where}
+        order by "date" asc`,
+      params
+    );
+    points.push(...rows);
+  }
+
+  const chargeColumns = await tableColumns(client, "charges");
+  const processColumns = await tableColumns(client, "charging_processes");
+  if (chargeColumns.has("date") && chargeColumns.has("battery_level") && chargeColumns.has("charging_process_id") && processColumns.has("id")) {
+    const carJoin = processColumns.has("car_id") ? `and cp."car_id" = $1` : "";
+    const params = processColumns.has("car_id") ? [carId, hours] : [hours];
+    const hoursParam = processColumns.has("car_id") ? "$2" : "$1";
+    const rangeColumn = chargeColumns.has("rated_battery_range_km") ? `c."rated_battery_range_km"` : "null";
+    const { rows } = await client.query(
+      `select c."date", c."battery_level", ${rangeColumn} as "range_km"
+         from "charges" c
+         join "charging_processes" cp on cp."id" = c."charging_process_id"
+        where c."date" >= now() - (${hoursParam} || ' hours')::interval
+          ${carJoin}
+        order by c."date" asc`,
+      params
+    );
+    points.push(...rows);
+  }
+
+  points.sort((a, b) => new Date(a.date) - new Date(b.date));
+  return sampleRows(points, 220);
+}
+
+async function getStateTimeline(client, carId, hours = 168) {
+  const events = [];
+
+  const statesColumns = await tableColumns(client, "states");
+  if (statesColumns.has("start_date")) {
+    const fields = selectList(statesColumns, ["start_date", "end_date", "state"]);
+    const where = statesColumns.has("car_id")
+      ? `where "car_id" = $1 and "start_date" >= now() - ($2 || ' hours')::interval`
+      : `where "start_date" >= now() - ($1 || ' hours')::interval`;
+    const params = statesColumns.has("car_id") ? [carId, hours] : [hours];
+    const { rows } = await client.query(`select ${fields} from "states" ${where} order by "start_date" desc limit 80`, params);
+    events.push(...rows.map((row) => ({ type: row.state || "state", start_date: row.start_date, end_date: row.end_date })));
+  }
+
+  const driveColumns = await tableColumns(client, "drives");
+  if (driveColumns.has("start_date")) {
+    const where = driveColumns.has("car_id")
+      ? `where "car_id" = $1 and "start_date" >= now() - ($2 || ' hours')::interval`
+      : `where "start_date" >= now() - ($1 || ' hours')::interval`;
+    const params = driveColumns.has("car_id") ? [carId, hours] : [hours];
+    const { rows } = await client.query(`select "id", "start_date", ${driveColumns.has("end_date") ? `"end_date"` : `null as "end_date"`}, ${driveColumns.has("distance") ? `"distance"` : `null as "distance"`} from "drives" ${where} order by "start_date" desc limit 80`, params);
+    events.push(...rows.map((row) => ({ ...row, type: "drive" })));
+  }
+
+  const chargeColumns = await tableColumns(client, "charging_processes");
+  if (chargeColumns.has("start_date")) {
+    const where = chargeColumns.has("car_id")
+      ? `where "car_id" = $1 and "start_date" >= now() - ($2 || ' hours')::interval`
+      : `where "start_date" >= now() - ($1 || ' hours')::interval`;
+    const params = chargeColumns.has("car_id") ? [carId, hours] : [hours];
+    const { rows } = await client.query(`select "id", "start_date", ${chargeColumns.has("end_date") ? `"end_date"` : `null as "end_date"`}, ${chargeColumns.has("charge_energy_added") ? `"charge_energy_added"` : `null as "charge_energy_added"`} from "charging_processes" ${where} order by "start_date" desc limit 80`, params);
+    events.push(...rows.map((row) => ({ ...row, type: "charge" })));
+  }
+
+  return events.sort((a, b) => new Date(b.start_date) - new Date(a.start_date)).slice(0, 120);
+}
+
+async function getBatteryHealth(client, carId) {
+  const columns = await tableColumns(client, "charges");
+  const processColumns = await tableColumns(client, "charging_processes");
+  if (!columns.has("battery_level") || !columns.has("date") || !columns.has("charging_process_id") || !processColumns.has("id")) {
+    return { points: [] };
+  }
+
+  const rangeColumn = columns.has("ideal_battery_range_km") ? "ideal_battery_range_km" : (columns.has("rated_battery_range_km") ? "rated_battery_range_km" : null);
+  if (!rangeColumn) return { points: [] };
+
+  const carJoin = processColumns.has("car_id") ? `and cp."car_id" = $1` : "";
+  const params = processColumns.has("car_id") ? [carId] : [];
+  const { rows } = await client.query(
+    `select date(c."date") as "date",
+            max(c."${rangeColumn}")::float as "range_km",
+            max(c."battery_level")::float as "battery_level"
+       from "charges" c
+       join "charging_processes" cp on cp."id" = c."charging_process_id"
+      where c."battery_level" >= 90 ${carJoin}
+      group by date(c."date")
+      order by date(c."date") desc
+      limit 80`,
+    params
+  );
+
+  const latest = rows[0]?.range_km || null;
+  const oldest = rows.at(-1)?.range_km || null;
+  return {
+    currentRangeKm: latest,
+    originalRangeKm: oldest,
+    degradationPercent: latest && oldest ? (1 - latest / oldest) * 100 : null,
+    points: rows.reverse()
+  };
 }
 
 async function getDriveStats(client, carId) {
@@ -293,6 +521,7 @@ async function getDashboard() {
       const carWhere = `where "car_id" = $1`;
 
       const position = await maybeLatest(client, "positions", [
+        "id",
         "date",
         "latitude",
         "longitude",
@@ -303,12 +532,24 @@ async function getDashboard() {
         "battery_level",
         "usable_battery_level",
         "est_battery_range",
+        "est_battery_range_km",
         "ideal_battery_range",
+        "ideal_battery_range_km",
         "rated_battery_range",
+        "rated_battery_range_km",
         "outside_temp",
         "inside_temp",
         "elevation",
-        "shift_state"
+        "shift_state",
+        "heading",
+        "is_climate_on",
+        "is_preconditioning",
+        "locked",
+        "sentry_mode",
+        "tpms_pressure_fl",
+        "tpms_pressure_fr",
+        "tpms_pressure_rl",
+        "tpms_pressure_rr"
       ], carWhere, [car.id]);
 
       const charge = await maybeLatest(client, "charges", [
@@ -324,21 +565,33 @@ async function getDashboard() {
         "charging_state",
         "fast_charger_present",
         "conn_charge_cable",
-        "plugged_in"
+        "plugged_in",
+        "scheduled_charging_start_time",
+        "ideal_battery_range_km",
+        "rated_battery_range_km"
       ], carWhere, [car.id]);
 
       const drives = await maybeRecent(client, "drives", [
         "id",
         "start_date",
         "end_date",
+        "start_address_id",
+        "end_address_id",
+        "start_geofence_id",
+        "end_geofence_id",
+        "start_position_id",
+        "end_position_id",
         "distance",
         "duration_min",
         "start_ideal_range_km",
         "end_ideal_range_km",
+        "start_rated_range_km",
+        "end_rated_range_km",
         "outside_temp_avg",
         "inside_temp_avg",
         "speed_max",
-        "power_max"
+        "power_max",
+        "power_min"
       ], "start_date", carWhere, [car.id], 180);
 
       const chargingProcess = await getLatestChargeProcess(client, car.id);
@@ -346,6 +599,11 @@ async function getDashboard() {
       const state = await getLatestState(client, car.id);
       const driveStats = await getDriveStats(client, car.id);
       const chargeStats = await getChargeStats(client, car.id);
+      const detailedDrives = await attachDriveDetails(client, drives);
+      const detailedCharges = await attachChargeDetails(client, recentCharges);
+      const socHistory = await getSocHistory(client, car.id);
+      const timeline = await getStateTimeline(client, car.id);
+      const batteryHealth = await getBatteryHealth(client, car.id);
 
       return {
         car,
@@ -353,12 +611,15 @@ async function getDashboard() {
         position,
         charge,
         latestChargingProcess: chargingProcess,
-        recentCharges,
-        recentDrives: drives,
+        recentCharges: detailedCharges,
+        recentDrives: detailedDrives,
+        socHistory,
+        timeline,
+        batteryHealth,
         stats: {
-          recentDriveDistance: sumNumbers(drives, "distance"),
-          recentChargeEnergy: sumNumbers(recentCharges, "charge_energy_added"),
-          recentChargeCost: sumNumbers(recentCharges, "cost"),
+          recentDriveDistance: sumNumbers(detailedDrives, "distance"),
+          recentChargeEnergy: sumNumbers(detailedCharges, "charge_energy_added"),
+          recentChargeCost: sumNumbers(detailedCharges, "cost"),
           ...driveStats,
           ...chargeStats
         }
@@ -393,6 +654,221 @@ app.get("/api/dashboard", async (_req, res) => {
       detail: error.message
     });
   }
+});
+
+function ok(res, data) {
+  res.json({ code: 200, message: "success", data });
+}
+
+app.get("/api/v1/cars", async (_req, res) => {
+  const client = await pool.connect();
+  try {
+    ok(res, await getCars(client));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+app.get("/api/v1/cars/:id/status", async (req, res) => {
+  try {
+    const data = await getDashboard();
+    const snapshot = data.cars.find((item) => String(item.car.id) === req.params.id);
+    if (!snapshot) {
+      res.status(404).json({ error: "Car not found" });
+      return;
+    }
+    ok(res, snapshot);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/v1/cars/:id/drives", async (req, res) => {
+  try {
+    const data = await getDashboard();
+    const snapshot = data.cars.find((item) => String(item.car.id) === req.params.id);
+    ok(res, snapshot?.recentDrives || []);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/v1/drives/:id", async (req, res) => {
+  try {
+    const data = await getDashboard();
+    const drive = data.cars.flatMap((snapshot) => snapshot.recentDrives || []).find((item) => String(item.id) === req.params.id);
+    if (!drive) {
+      res.status(404).json({ error: "Drive not found" });
+      return;
+    }
+    ok(res, drive);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/v1/cars/:id/charges", async (req, res) => {
+  try {
+    const data = await getDashboard();
+    const snapshot = data.cars.find((item) => String(item.car.id) === req.params.id);
+    ok(res, snapshot?.recentCharges || []);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/v1/charges/:id", async (req, res) => {
+  try {
+    const data = await getDashboard();
+    const charge = data.cars.flatMap((snapshot) => snapshot.recentCharges || []).find((item) => String(item.id) === req.params.id);
+    if (!charge) {
+      res.status(404).json({ error: "Charge not found" });
+      return;
+    }
+    ok(res, charge);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/v1/drives/:id/positions", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    ok(res, await getDrivePositions(client, req.params.id));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+app.get("/api/v1/charges/:id/stats", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    ok(res, await getChargePoints(client, req.params.id));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+app.get("/api/v1/cars/:id/stats/soc-history", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    ok(res, await getSocHistory(client, req.params.id, Number(req.query.hours || 168)));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+app.get("/api/v1/cars/:id/stats/states-timeline", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    ok(res, await getStateTimeline(client, req.params.id, Number(req.query.hours || 168)));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+app.get("/api/v1/cars/:id/stats/battery", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    ok(res, await getBatteryHealth(client, req.params.id));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+app.get("/api/v1/cars/:id/stats/overview", async (req, res) => {
+  try {
+    const data = await getDashboard();
+    const snapshot = data.cars.find((item) => String(item.car.id) === req.params.id);
+    if (!snapshot) {
+      res.status(404).json({ error: "Car not found" });
+      return;
+    }
+    ok(res, {
+      car: snapshot.car,
+      state: snapshot.state,
+      position: snapshot.position,
+      charge: snapshot.charge,
+      stats: snapshot.stats,
+      batteryHealth: snapshot.batteryHealth
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/v1/cars/:id/stats/efficiency", async (req, res) => {
+  try {
+    const data = await getDashboard();
+    const snapshot = data.cars.find((item) => String(item.car.id) === req.params.id);
+    const drives = snapshot?.recentDrives || [];
+    const items = drives
+      .filter((drive) => Number(drive.distance) > 0)
+      .map((drive) => {
+        const rangeUsed = Number(drive.start_ideal_range_km || 0) - Number(drive.end_ideal_range_km || 0);
+        return {
+          date: drive.start_date,
+          distance: drive.distance,
+          rangeUsed,
+          efficiency: rangeUsed > 0 ? rangeUsed / Number(drive.distance) * 153 : null
+        };
+      });
+    ok(res, items);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/v1/cars/:id/drives/stats_summary", async (req, res) => {
+  try {
+    const data = await getDashboard();
+    const snapshot = data.cars.find((item) => String(item.car.id) === req.params.id);
+    const drives = snapshot?.recentDrives || [];
+    ok(res, {
+      totalDistance: sumNumbers(drives, "distance"),
+      driveCount: drives.length,
+      maxSpeed: Math.max(0, ...drives.map((drive) => Number(drive.speed_max) || 0)),
+      totalDuration: sumNumbers(drives, "duration_min")
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/v1/cars/:id/charges/stats_summary", async (req, res) => {
+  try {
+    const data = await getDashboard();
+    const snapshot = data.cars.find((item) => String(item.car.id) === req.params.id);
+    const charges = snapshot?.recentCharges || [];
+    ok(res, {
+      totalEnergy: sumNumbers(charges, "charge_energy_added"),
+      totalCost: sumNumbers(charges, "cost"),
+      totalDuration: sumNumbers(charges, "duration_min"),
+      totalCount: charges.length
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/v1/auth/test", (_req, res) => {
+  ok(res, { status: "ok", message: "API key is valid" });
+});
+
+app.get("/api/v1/settings", (_req, res) => {
+  ok(res, { storage: "browser-local-storage", writable: false });
 });
 
 app.listen(port, () => {

@@ -1,0 +1,9 @@
+{
+  "name": "TeslaMate Dashboard",
+  "short_name": "TeslaMate",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#05070c",
+  "theme_color": "#05070c",
+  "description": "Private TeslaMate dashboard for vehicle status, trips, charging, and analytics."
+}
