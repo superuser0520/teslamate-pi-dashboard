@@ -1,4 +1,4 @@
-const cacheName = "teslamate-dashboard-v2";
+const cacheName = "teslamate-dashboard-v3";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(cacheName).then((cache) => cache.addAll(["/", "/styles.css", "/app.js", "/manifest.webmanifest"])));
