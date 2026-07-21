@@ -35,11 +35,8 @@ const escapeHtml = (input) => String(input ?? "-").replace(/[&<>"']/g, (char) =>
   "'": "&#039;"
 })[char]);
 const themeOptions = [
-  { code: "ios", label: "iOS Glass" },
-  { code: "cyber", label: "Cyber Blue" },
-  { code: "tesla", label: "Tesla Red" },
-  { code: "aurora", label: "Aurora" },
-  { code: "night", label: "Night" }
+  { code: "dark", label: "Full Black" },
+  { code: "light", label: "White" }
 ];
 const value = (input) => escapeHtml(input ?? "-");
 const toNumber = (input) => {
@@ -76,12 +73,12 @@ function loadSettings() {
     return {
       distanceUnit: "mi",
       currency: "USD",
-      theme: "ios",
+      theme: "dark",
       density: "comfortable",
       ...JSON.parse(localStorage.getItem(settingsStorageKey) || "{}")
     };
   } catch {
-    return { distanceUnit: "mi", currency: "USD", theme: "ios", density: "comfortable" };
+    return { distanceUnit: "mi", currency: "USD", theme: "dark", density: "comfortable" };
   }
 }
 
@@ -93,7 +90,9 @@ function saveSettings(nextSettings) {
 }
 
 function applyTheme() {
-  document.body.dataset.theme = settings.theme || "ios";
+  const allowedThemes = new Set(themeOptions.map((option) => option.code));
+  settings.theme = allowedThemes.has(settings.theme) ? settings.theme : "dark";
+  document.body.dataset.theme = settings.theme;
   document.body.dataset.density = settings.density || "comfortable";
 }
 
@@ -673,7 +672,7 @@ function renderSettings() {
             <select id="currencySelect">${options}</select>
           </label>
           <label class="setting-row">
-            <span><strong>Theme</strong><small>Changes the dashboard accent while keeping the iOS glass layout.</small></span>
+            <span><strong>Theme</strong><small>Switch between a clean white iOS dashboard and a full black iOS dashboard.</small></span>
             <select id="themeSelect">${themeSelectOptions}</select>
           </label>
           <label class="setting-row">
@@ -723,7 +722,7 @@ function render() {
   emptyStateEl.hidden = !dashboardData || cars.length > 0 || activeTab === "settings";
 
   if (!dashboardData && activeTab !== "settings") {
-    appViewEl.innerHTML = `<section class="panel"><h3>Loading</h3><p class="small">Connecting to TeslaMate...</p></section>`;
+    appViewEl.innerHTML = `<section class="panel"><h3>Loading</h3><p class="small">Connecting to SooLew...</p></section>`;
     initFreeMaps();
     return;
   }

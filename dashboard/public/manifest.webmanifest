@@ -1,9 +1,9 @@
 {
-  "name": "TeslaMate Dashboard",
-  "short_name": "TeslaMate",
+  "name": "SooLew Dashboard",
+  "short_name": "SooLew",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#05070c",
-  "theme_color": "#05070c",
-  "description": "Private TeslaMate dashboard for vehicle status, trips, charging, and analytics."
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "description": "Private SooLew dashboard for vehicle status, trips, charging, and analytics."
 }
