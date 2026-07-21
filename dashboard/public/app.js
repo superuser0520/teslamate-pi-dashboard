@@ -11,7 +11,8 @@ const tokenStorageKey = "teslamateDashboardToken";
 const settingsStorageKey = "teslamateDashboardSettings";
 
 let dashboardData = null;
-let activeTab = "overview";
+let activeTab = "charging";
+let selectedChargeId = null;
 let settings = loadSettings();
 let pendingRoutes = [];
 let routeRenderId = 0;
@@ -73,7 +74,7 @@ function loadSettings() {
     return {
       distanceUnit: "mi",
       currency: "USD",
-      theme: "dark",
+      theme: "light",
       density: "comfortable",
       ...JSON.parse(localStorage.getItem(settingsStorageKey) || "{}")
     };
@@ -478,7 +479,7 @@ function renderVehicleHero(snapshot) {
   `;
 }
 
-function renderOverview(cars) {
+renderOverview = function(cars) {
   return `
     <section class="vehicle-list cockpit-list">
       ${cars.map((snapshot) => {
@@ -807,6 +808,415 @@ function setPageCopy() {
   pageSubtitleEl.textContent = subtitle;
 }
 
+function pdIcon(name, label = "") {
+  const alt = label ? ` alt="${value(label)}"` : ` alt="" aria-hidden="true"`;
+  return `<img class="pd-icon" src="/assets/icons/${name}.png"${alt}>`;
+}
+
+function pdCarName(snapshot) {
+  const model = [snapshot?.car?.model, snapshot?.car?.trim_badging].filter(Boolean).join(" ");
+  return model || snapshot?.car?.name || "White Model 3";
+}
+
+function pdPlate() {
+  return "JYJ602";
+}
+
+function pdMainSnapshot(cars) {
+  return cars[0] || {};
+}
+
+function pdChargeRows(cars) {
+  return cars.flatMap((snapshot) => (snapshot.recentCharges || []).map((chargeSession) => ({
+    ...chargeSession,
+    snapshot,
+    carName: snapshot.car.name || pdCarName(snapshot)
+  }))).sort((a, b) => new Date(b.start_date || 0) - new Date(a.start_date || 0));
+}
+
+function pdDriveRows(cars) {
+  return cars.flatMap((snapshot) => (snapshot.recentDrives || []).map((drive) => ({
+    ...drive,
+    snapshot,
+    carName: snapshot.car.name || pdCarName(snapshot)
+  }))).sort((a, b) => new Date(b.start_date || 0) - new Date(a.start_date || 0));
+}
+
+function pdChargeLocation(chargeSession) {
+  return toNumber(chargeSession?.charger_voltage) > 300 ? "Supercharger" : "Home";
+}
+
+function pdAveragePower(chargeSession) {
+  const powers = (chargeSession?.points || []).map((point) => toNumber(point.charger_power)).filter((item) => item !== null);
+  if (powers.length) return powers.reduce((sum, item) => sum + item, 0) / powers.length;
+  const durationHours = (toNumber(chargeSession?.duration_min) || 0) / 60;
+  const energy = toNumber(chargeSession?.charge_energy_added);
+  return durationHours > 0 && energy !== null ? energy / durationHours : null;
+}
+
+function pdPeakPower(chargeSession) {
+  const powers = (chargeSession?.points || []).map((point) => toNumber(point.charger_power)).filter((item) => item !== null);
+  return powers.length ? Math.max(...powers) : pdAveragePower(chargeSession);
+}
+
+function pdMetricRail(items) {
+  return `
+    <div class="pd-metric-rail">
+      ${items.map((item) => `
+        <div class="pd-metric">
+          <span>${value(item.label)}</span>
+          <strong>${item.value}</strong>
+          <small>${value(item.detail || "")}</small>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function pdCarHeader(snapshot) {
+  return `
+    <div class="pd-car-chip">
+      <img src="/assets/cars/model3-white-light.png" alt="White Tesla Model 3">
+      <div>
+        <strong>${value(pdCarName(snapshot))}</strong>
+        <span>${pdPlate()}</span>
+      </div>
+    </div>
+  `;
+}
+
+function pdDetailRows(rows) {
+  return `
+    <div class="pd-detail-list">
+      ${rows.map(([label, content]) => `<div><span>${value(label)}</span><strong>${content}</strong></div>`).join("")}
+    </div>
+  `;
+}
+
+function pdBatteryShift(start, end) {
+  const startValue = toNumber(start);
+  const endValue = toNumber(end);
+  const startWidth = startValue === null ? 28 : Math.max(5, Math.min(92, startValue));
+  const fillWidth = endValue === null || startValue === null ? 52 : Math.max(8, Math.min(94, endValue - startValue));
+  return `
+    <div class="pd-battery-shift">
+      <div class="pd-battery-number"><strong>${startValue === null ? "-" : startValue}</strong><span>%</span><small>Start</small></div>
+      <div class="pd-battery-rail" aria-hidden="true">
+        <span class="pd-battery-muted" style="width:${startWidth}%"></span>
+        <span class="pd-battery-fill" style="width:${fillWidth}%"></span>
+        <b>${pdIcon("charging")}</b>
+      </div>
+      <div class="pd-battery-number end"><strong>${endValue === null ? "-" : endValue}</strong><span>%</span><small>End</small></div>
+    </div>
+  `;
+}
+
+function pdChargeSummary(chargeSession) {
+  return `
+    <div class="pd-session-stats">
+      <div>${pdIcon("charging")}<strong>${fixed(chargeSession.charge_energy_added, " kWh", 1)}</strong><span>Energy added</span></div>
+      <div>${pdIcon("wallet")}<strong>${money(chargeSession.cost)}</strong><span>Total cost</span></div>
+      <div>${pdIcon("pulse")}<strong>${fixed(pdAveragePower(chargeSession), " kW", 0)}</strong><span>Avg. power</span></div>
+      <div>${pdIcon("battery")}<strong>${fixed(chargeSession.points?.at(-1)?.charger_voltage, " V", 0)}</strong><span>Avg. voltage</span></div>
+      <div>${pdIcon("check")}<strong>${duration(chargeSession.start_date, chargeSession.end_date, chargeSession.duration_min)}</strong><span>Duration</span></div>
+      <div>${pdIcon("settings")}<strong>${temperature(chargeSession.outside_temp_avg)}</strong><span>Outside</span></div>
+    </div>
+  `;
+}
+
+function pdChargeRow(chargeSession, selected = false) {
+  const supercharger = pdChargeLocation(chargeSession) === "Supercharger";
+  return `
+    <button class="pd-session-row ${selected ? "selected" : ""}" type="button" data-charge-id="${value(chargeSession.id)}">
+      <span class="pd-row-icon ${supercharger ? "danger" : ""}">${pdIcon(supercharger ? "charging" : "home")}</span>
+      <span><strong>${shortDate(chargeSession.start_date)}</strong><small>${timeOnly(chargeSession.start_date)} to ${timeOnly(chargeSession.end_date)}</small></span>
+      <span><strong>${fixed(chargeSession.charge_energy_added, " kWh", 1)}</strong><small>Energy added</small></span>
+      <span><strong>${money(chargeSession.cost)}</strong><small>Total cost</small></span>
+      <span><strong>${fixed(pdAveragePower(chargeSession), " kW", 0)}</strong><small>Avg. power</small></span>
+      <span><strong>${percent(chargeSession.start_battery_level)} -> ${percent(chargeSession.end_battery_level)}</strong><small>Battery</small></span>
+      <span><strong>${duration(chargeSession.start_date, chargeSession.end_date, chargeSession.duration_min)}</strong><small>Duration</small></span>
+      <span class="pd-chevron">&rsaquo;</span>
+    </button>
+  `;
+}
+
+function pdChargeDetail(chargeSession, snapshot) {
+  if (!chargeSession) {
+    return `<aside class="pd-side-panel"><h3>Session details</h3><p class="small">No charge session selected.</p></aside>`;
+  }
+
+  return `
+    <aside class="pd-side-panel">
+      <div class="pd-side-head">
+        <h3>Session details</h3>
+        <button class="pd-icon-button" type="button" aria-label="Close">×</button>
+      </div>
+      <div class="pd-side-location">
+        <span class="pd-row-icon">${pdIcon(pdChargeLocation(chargeSession) === "Supercharger" ? "charging" : "home")}</span>
+        <div>
+          <strong>${value(pdChargeLocation(chargeSession))}</strong>
+          <small>${shortDate(chargeSession.start_date)} · ${timeOnly(chargeSession.start_date)} to ${timeOnly(chargeSession.end_date)}</small>
+        </div>
+      </div>
+      <img class="pd-side-car" src="/assets/cars/model3-white-light.png" alt="White Tesla Model 3">
+      ${pdDetailRows([
+        ["Vehicle", `${value(pdCarName(snapshot))} (${pdPlate()})`],
+        ["Session type", pdChargeLocation(chargeSession) === "Supercharger" ? "DC Fast Charging" : "AC Charging"],
+        ["Start / End", `${timeOnly(chargeSession.start_date)} / ${timeOnly(chargeSession.end_date)}`],
+        ["Duration", duration(chargeSession.start_date, chargeSession.end_date, chargeSession.duration_min)],
+        ["Battery start / end", `${percent(chargeSession.start_battery_level)} / ${percent(chargeSession.end_battery_level)}`],
+        ["Energy added", fixed(chargeSession.charge_energy_added, " kWh", 1)],
+        ["Total cost", money(chargeSession.cost)],
+        ["Average power", fixed(pdAveragePower(chargeSession), " kW", 0)],
+        ["Peak power", fixed(pdPeakPower(chargeSession), " kW", 0)],
+        ["Outside temperature", temperature(chargeSession.outside_temp_avg)]
+      ])}
+      <div class="pd-side-chart">
+        <h4>Charging power</h4>
+        ${renderSparkline(chargeSession.points || [], "charger_power", "Charging power", " kW")}
+      </div>
+    </aside>
+  `;
+}
+
+renderOverview = function(cars) {
+  const snapshot = pdMainSnapshot(cars);
+  const { position, charge, stats = {} } = snapshot;
+  const battery = position?.battery_level ?? position?.soc ?? charge?.battery_level;
+  const range = rangeValue(position, charge);
+  const lastDate = position?.date || charge?.date || snapshot.car?.updated_at;
+
+  return `
+    <section class="pd-workspace pd-overview">
+      <div class="pd-main-panel">
+        <div class="pd-page-head">
+          <div><h1>Overview</h1><p>Live vehicle state and recent TeslaMate signals.</p></div>
+          ${pdCarHeader(snapshot)}
+        </div>
+        <section class="pd-hero">
+          <div>
+            <span class="pd-status-dot"></span>
+            <strong>${value(vehicleState(snapshot))}</strong>
+            <small>Updated ${timeOnly(lastDate)} · ${pdPlate()}</small>
+            <div class="pd-hero-number"><b>${percent(battery)}</b><span>${distance(range)} estimated range</span></div>
+          </div>
+          <img src="/assets/cars/model3-white-light.png" alt="White Tesla Model 3">
+        </section>
+        ${pdMetricRail([
+          { label: "30 day distance", value: distance(stats.monthDriveDistance), detail: "Trips" },
+          { label: "30 day charging", value: fixed(stats.monthChargeEnergy, " kWh", 1), detail: "Energy added" },
+          { label: "30 day cost", value: money(stats.monthChargeCost), detail: settings.currency }
+        ])}
+        <section class="pd-card">
+          <h3>State of charge</h3>
+          ${renderSocHistory(snapshot)}
+        </section>
+      </div>
+      <aside class="pd-side-panel">
+        <h3>Vehicle details</h3>
+        ${pdDetailRows([
+          ["Battery", percent(battery)],
+          ["Range", distance(range)],
+          ["Odometer", distance(position?.odometer)],
+          ["Speed", speed(position?.speed)],
+          ["Power", fixed(position?.power, " kW")],
+          ["Outside", temperature(position?.outside_temp)],
+          ["Inside", temperature(position?.inside_temp)],
+          ["Location", mapLink(position)]
+        ])}
+      </aside>
+    </section>
+  `;
+};
+
+renderTrips = function(cars) {
+  const rows = pdDriveRows(cars);
+  const selected = rows[0];
+  const totalDistance = rows.reduce((sum, drive) => sum + (toNumber(drive.distance) || 0), 0);
+
+  return `
+    <section class="pd-workspace">
+      <div class="pd-main-panel">
+        <div class="pd-page-head">
+          <div><h1>Trips</h1><p>Recent drives in the same inspection-first interface.</p></div>
+          <button class="pd-secondary-button" type="button">${pdIcon("bars")} Compare month</button>
+        </div>
+        ${pdMetricRail([
+          { label: "Recent distance", value: distance(totalDistance), detail: `${rows.length} drives` },
+          { label: "Longest drive", value: distance(Math.max(0, ...rows.map((drive) => toNumber(drive.distance) || 0))), detail: "Recorded" },
+          { label: "Top speed", value: speed(Math.max(0, ...rows.map((drive) => toNumber(drive.speed_max) || 0))), detail: "Peak" }
+        ])}
+        <section class="pd-list-panel">
+          <h3>Previous trips</h3>
+          ${rows.length ? rows.slice(0, 12).map((drive) => `
+            <div class="pd-session-row">
+              <span class="pd-row-icon">${pdIcon("car")}</span>
+              <span><strong>${shortDate(drive.start_date)}</strong><small>${timeOnly(drive.start_date)} to ${timeOnly(drive.end_date)}</small></span>
+              <span><strong>${distance(drive.distance)}</strong><small>Distance</small></span>
+              <span><strong>${duration(drive.start_date, drive.end_date, drive.duration_min)}</strong><small>Duration</small></span>
+              <span><strong>${speed(drive.speed_max)}</strong><small>Max speed</small></span>
+              <span><strong>${temperature(drive.outside_temp_avg)}</strong><small>Outside</small></span>
+              <span class="pd-chevron">&rsaquo;</span>
+            </div>
+          `).join("") : `<p class="small">No trips yet.</p>`}
+        </section>
+      </div>
+      <aside class="pd-side-panel">
+        <h3>Trip details</h3>
+        ${selected ? `
+          ${renderRoute(selected.positions)}
+          ${pdDetailRows([
+            ["Vehicle", value(selected.carName)],
+            ["Start", dateTime(selected.start_date)],
+            ["End", dateTime(selected.end_date)],
+            ["Distance", distance(selected.distance)],
+            ["Duration", duration(selected.start_date, selected.end_date, selected.duration_min)],
+            ["Max speed", speed(selected.speed_max)],
+            ["Power peak", fixed(selected.power_max, " kW")]
+          ])}
+        ` : `<p class="small">No trip selected.</p>`}
+      </aside>
+    </section>
+  `;
+};
+
+renderCharging = function(cars) {
+  const rows = pdChargeRows(cars);
+  const selected = rows.find((chargeSession) => String(chargeSession.id) === String(selectedChargeId)) || rows[0];
+  selectedChargeId = selected?.id ?? null;
+
+  return `
+    <section class="pd-workspace pd-charging">
+      <div class="pd-main-panel">
+        <div class="pd-page-head">
+          <div><h1>Charging</h1><p>Latest session first, with detail inspection on the right.</p></div>
+          <div class="pd-actions">
+            <button class="pd-primary-button" type="button">View session details</button>
+            <button class="pd-secondary-button" type="button">${pdIcon("bars")} Compare month</button>
+          </div>
+        </div>
+        ${selected ? `
+          <h2>Latest session</h2>
+          <section class="pd-latest-card">
+            <div class="pd-location-line">
+              <span class="pd-row-icon">${pdIcon(pdChargeLocation(selected) === "Supercharger" ? "charging" : "home")}</span>
+              <div><strong>${value(pdChargeLocation(selected))}</strong><small>${shortDate(selected.start_date)} · ${timeOnly(selected.start_date)} to ${timeOnly(selected.end_date)}</small></div>
+            </div>
+            ${pdBatteryShift(selected.start_battery_level, selected.end_battery_level)}
+            ${pdChargeSummary(selected)}
+            <div class="pd-wide-chart">
+              ${renderSparkline(selected.points || [], "charger_power", "Charging power", " kW")}
+            </div>
+          </section>
+          <section class="pd-list-panel">
+            <h3>Previous sessions</h3>
+            ${rows.slice(1, 8).map((chargeSession) => pdChargeRow(chargeSession, String(chargeSession.id) === String(selectedChargeId))).join("")}
+          </section>
+        ` : `<section class="pd-card"><p class="small">No charge sessions yet.</p></section>`}
+      </div>
+      ${pdChargeDetail(selected, selected?.snapshot || pdMainSnapshot(cars))}
+    </section>
+  `;
+};
+
+renderActivity = function(cars) {
+  const snapshot = pdMainSnapshot(cars);
+  const rows = cars.flatMap((item) => (item.timeline || []).map((event) => ({
+    ...event,
+    carName: item.car.name || pdCarName(item)
+  }))).sort((a, b) => new Date(b.start_date) - new Date(a.start_date));
+
+  return `
+    <section class="pd-workspace">
+      <div class="pd-main-panel">
+        <div class="pd-page-head">
+          <div><h1>Battery</h1><p>Battery trend, health, and recent vehicle timeline.</p></div>
+          ${pdCarHeader(snapshot)}
+        </div>
+        ${pdMetricRail([
+          { label: "Current 90%+ range", value: distance(snapshot.batteryHealth?.currentRangeKm), detail: "Battery health" },
+          { label: "First 90%+ range", value: distance(snapshot.batteryHealth?.originalRangeKm), detail: "Baseline" },
+          { label: "Estimated change", value: snapshot.batteryHealth?.degradationPercent == null ? "-" : `${number(snapshot.batteryHealth.degradationPercent, 1)}%`, detail: "Tracked" }
+        ])}
+        <section class="pd-card">
+          <h3>State of charge history</h3>
+          ${renderSocHistory(snapshot)}
+        </section>
+      </div>
+      <aside class="pd-side-panel">
+        <h3>Activity timeline</h3>
+        <div class="pd-timeline">
+          ${rows.length ? rows.slice(0, 12).map((item) => `
+            <div>
+              <span class="pd-dot ${value(item.type)}"></span>
+              <p><strong>${activityLabel(item)}</strong><small>${value(item.carName)} · ${dateTime(item.start_date)}</small></p>
+            </div>
+          `).join("") : `<p class="small">No recent activity yet.</p>`}
+        </div>
+      </aside>
+    </section>
+  `;
+};
+
+renderSettings = function() {
+  const options = currencyOptions.map((option) => (
+    `<option value="${option.code}" ${settings.currency === option.code ? "selected" : ""}>${option.code} - ${option.label}</option>`
+  )).join("");
+  const themeSelectOptions = themeOptions.map((option) => (
+    `<option value="${option.code}" ${settings.theme === option.code ? "selected" : ""}>${option.label}</option>`
+  )).join("");
+
+  return `
+    <section class="pd-workspace">
+      <div class="pd-main-panel">
+        <div class="pd-page-head">
+          <div><h1>More</h1><p>Display preferences and self-hosted service shortcuts.</p></div>
+        </div>
+        <section class="pd-list-panel">
+          <h3>Display</h3>
+          <label class="setting-row"><span><strong>Distance unit</strong><small>Range, odometer, speed, and trips.</small></span><select id="distanceUnitSelect"><option value="mi" ${settings.distanceUnit === "mi" ? "selected" : ""}>Miles</option><option value="km" ${settings.distanceUnit === "km" ? "selected" : ""}>Kilometers</option></select></label>
+          <label class="setting-row"><span><strong>Currency</strong><small>Display symbol for TeslaMate costs.</small></span><select id="currencySelect">${options}</select></label>
+          <label class="setting-row"><span><strong>Theme</strong><small>Option 2 is optimized for White.</small></span><select id="themeSelect">${themeSelectOptions}</select></label>
+          <label class="setting-row"><span><strong>Layout density</strong><small>Comfortable is closest to the selected design.</small></span><select id="densitySelect"><option value="comfortable" ${settings.density === "comfortable" ? "selected" : ""}>Comfortable</option><option value="compact" ${settings.density === "compact" ? "selected" : ""}>Compact</option></select></label>
+        </section>
+      </div>
+      <aside class="pd-side-panel">
+        <h3>System</h3>
+        ${pdDetailRows([
+          ["TeslaMate", `<a class="map-link" href="${teslamateLinkEl.href}" target="_blank" rel="noreferrer">Open</a>`],
+          ["Grafana", `<a class="map-link" href="${grafanaLinkEl.href}" target="_blank" rel="noreferrer">Open</a>`],
+          ["API Health", `<a class="map-link" href="/api/health" target="_blank" rel="noreferrer">Check</a>`],
+          ["CyberUI APIs", `<a class="map-link" href="/api/v1/cars" target="_blank" rel="noreferrer">View</a>`],
+          ["Install", "Add to home screen"],
+          ["Data", "Read-only"]
+        ])}
+      </aside>
+    </section>
+  `;
+};
+
+setPageCopy = function() {
+  const copy = {
+    overview: ["Overview", "Live vehicle state and self-hosted Tesla signals."],
+    trips: ["Trips", "Recent drives in the same inspection-first interface."],
+    charging: ["Charging", "Latest charging session, previous records, and detail inspection."],
+    activity: ["Battery", "Battery trend, health, and recent activity."],
+    settings: ["More", "Display preferences and service shortcuts."]
+  };
+  const [title, subtitle] = copy[activeTab] || copy.overview;
+  pageTitleEl.textContent = title;
+  pageSubtitleEl.textContent = subtitle;
+};
+
+function wireProductDesignInteractions() {
+  document.querySelectorAll("[data-charge-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedChargeId = button.dataset.chargeId;
+      render();
+    });
+  });
+};
+
 function render() {
   pendingRoutes = [];
   routeRenderId = 0;
@@ -834,6 +1244,7 @@ function render() {
     document.querySelector("#themeSelect").addEventListener("change", (event) => saveSettings({ theme: event.target.value }));
     document.querySelector("#densitySelect").addEventListener("change", (event) => saveSettings({ density: event.target.value }));
   }
+  wireProductDesignInteractions();
   initFreeMaps();
   wireMapResize();
 }

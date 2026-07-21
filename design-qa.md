@@ -1,18 +1,19 @@
 # Design QA
 
-## SooLew iOS Theme Deployment
+## Product Design Option 2 Implementation
 
-- Verified the dashboard renders with the new `SooLew` brand in the top bar and document title.
-- Verified the default `Full Black` theme against mock TeslaMate data at desktop and mobile viewport sizes.
-- Verified the `White` theme renders clean card surfaces, readable text, map tiles, charts, temperature, and elevation values.
-- Verified Settings exposes only the selected theme choices: `Full Black` and `White`.
-- Verified OpenStreetMap/Leaflet maps initialize with vehicle location data.
-- Reworked the Overview screen to match the selected iOS mockup more closely: compact battery/range hero, car visual placement, two-column insight cards, state-of-charge card, and bottom tab labels.
-- Verified the revised Overview at 390 x 844 with no horizontal scroll and a fixed bottom tab bar.
-- Rebuilt the Overview around generated assets: white Model 3 hero photos for light/dark themes, generated iOS-style PNG icons, and exact `JYJ602` plate text in the UI.
-- Verified desktop Overview expands into a two-column cockpit layout and the generated image/icon assets load successfully.
-
-Final result: passed.
+- Reference target: ImageGen option 2, the light iOS-style Charging screen with a primary session card, previous-session rows, fixed bottom navigation, and right-side session details.
+- Scope: Applied the selected visual system to Charging, Overview, Trips, Battery, and More.
+- Verified Charging renders as the default screen with the selected option 2 structure.
+- Verified selecting a previous charging session updates the right-side detail panel.
+- Verified Overview, Trips, Battery, and More each render inside the same light split-panel product design system.
+- Verified desktop layout at 1440 x 1024 has no horizontal overflow.
+- Verified mobile layout at 390 x 844 has no horizontal overflow and keeps fixed bottom navigation.
+- Verified desktop uses a two-column grid with a dedicated right-side details panel.
+- Verified phone uses a single-column stacked layout with two-column action and metric groups.
+- Verified generated Model 3 and existing PNG icon assets load from the project.
+- Verified top brand mark, bottom tab icons, button icons, row icons, and charging metric icons use fixed-size alignment slots after the logo-position fix.
+- Verified browser console has no runtime errors in the mock-data preview.
 
 Checks run:
 
@@ -20,3 +21,5 @@ Checks run:
 node --check dashboard/public/app.js
 node --check dashboard/server.js
 ```
+
+Final result: passed.
