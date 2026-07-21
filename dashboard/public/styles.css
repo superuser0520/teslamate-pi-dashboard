@@ -1135,24 +1135,25 @@ body[data-screen="overview"] .logout-button {
 }
 
 body[data-screen="overview"] .status-pill::before {
-  width: 18px;
-  height: 18px;
-  border: 2px solid var(--ink);
-  background: transparent;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 0;
+  background: center / contain no-repeat url("/assets/icons/bell.png");
 }
 
 body[data-screen="overview"] .status-pill.online::before {
-  border-color: var(--green);
-  background: transparent;
+  background: center / contain no-repeat url("/assets/icons/bell.png");
 }
 
 body[data-screen="overview"] .logout-button::before {
   content: "";
-  width: 17px;
-  height: 17px;
-  border: 2px solid var(--ink);
-  border-radius: 50%;
-  box-shadow: 0 -8px 0 -6px var(--ink);
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 0;
+  background: center / contain no-repeat url("/assets/icons/settings.png");
+  box-shadow: none;
 }
 
 body[data-screen="overview"] .tabbar {
@@ -1184,35 +1185,37 @@ body[data-screen="overview"] .tab-button {
 
 body[data-screen="overview"] .tab-button::before {
   content: "";
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   margin-bottom: 3px;
-  border: 2px solid currentColor;
-  border-radius: 5px;
+  border: 0;
+  border-radius: 0;
+  background: center / contain no-repeat url("/assets/icons/home.png");
 }
 
 body[data-screen="overview"] .tab-button[data-tab="trips"]::before {
-  border-radius: 9px 9px 4px 4px;
+  background-image: url("/assets/icons/car.png");
 }
 
 body[data-screen="overview"] .tab-button[data-tab="charging"]::before {
-  width: 12px;
-  border-radius: 2px;
-  transform: skew(-10deg);
+  width: 24px;
+  border-radius: 0;
+  background-image: url("/assets/icons/charging.png");
+  transform: none;
 }
 
 body[data-screen="overview"] .tab-button[data-tab="activity"]::before {
-  border-radius: 4px;
-  box-shadow: inset 0 -6px 0 currentColor;
+  background-image: url("/assets/icons/battery.png");
+  box-shadow: none;
 }
 
 body[data-screen="overview"] .tab-button[data-tab="settings"]::before {
-  width: 20px;
-  height: 4px;
+  width: 24px;
+  height: 24px;
   border: 0;
-  border-radius: 99px;
-  background: currentColor;
-  box-shadow: 0 -7px 0 currentColor, 0 7px 0 currentColor;
+  border-radius: 0;
+  background: center / contain no-repeat url("/assets/icons/more.png");
+  box-shadow: none;
 }
 
 body[data-screen="overview"] .tab-button.active {
@@ -1229,6 +1232,10 @@ body[data-screen="overview"] .tab-button.active {
   display: grid;
   gap: 10px;
   padding: 2px 4px 0;
+}
+
+.vehicle-meta {
+  display: none;
 }
 
 .hero-status {
@@ -1311,28 +1318,34 @@ body[data-screen="overview"] .tab-button.active {
   font-weight: 500;
 }
 
-.cockpit .vehicle-visual {
-  width: 235px;
-  height: 92px;
-  margin: 0;
+.vehicle-photo {
+  position: relative;
+  width: min(250px, 100%);
+  height: 116px;
   justify-self: end;
-  transform: translateX(12px);
+  transform: translateX(16px);
+  overflow: hidden;
 }
 
-.cockpit .car-body {
-  bottom: 13px;
-  height: 42px;
-  border-radius: 42px 42px 17px 17px;
+.car-asset {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
 }
 
-.cockpit .car-roof {
-  bottom: 42px;
-  height: 36px;
+.car-asset-light {
+  display: none;
 }
 
-.cockpit .car-glass {
-  bottom: 49px;
-  height: 22px;
+body[data-theme="light"] .car-asset-dark {
+  display: none;
+}
+
+body[data-theme="light"] .car-asset-light {
+  display: block;
 }
 
 .ios-grid {
@@ -1403,33 +1416,30 @@ body[data-screen="overview"] .tab-button.active {
 }
 
 .tile-icon {
-  width: 18px;
-  height: 18px;
-  border: 2px solid var(--blue);
-  border-radius: 5px;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 0;
+  background: center / contain no-repeat url("/assets/icons/check.png");
 }
 
 .tile-icon.check {
-  border-radius: 50%;
-  border-color: var(--green);
+  background-image: url("/assets/icons/check.png");
 }
 
 .tile-icon.pulse {
-  width: 20px;
-  height: 10px;
-  border-width: 0 0 2px;
-  border-radius: 0;
-  transform: skew(-18deg);
+  background-image: url("/assets/icons/pulse.png");
+  transform: none;
 }
 
 .tile-icon.wallet {
-  border-radius: 3px;
+  background-image: url("/assets/icons/wallet.png");
 }
 
 .tile-icon.bars {
-  border-width: 0 0 2px 2px;
-  border-radius: 0;
-  box-shadow: 6px -3px 0 -4px var(--blue), 11px -8px 0 -4px var(--blue);
+  background-image: url("/assets/icons/bars.png");
+  box-shadow: none;
 }
 
 .insight-tile strong {
@@ -1551,15 +1561,161 @@ body[data-screen="overview"] .activity-grid {
 
 @media (min-width: 861px) {
   body[data-screen="overview"] {
-    background:
-      linear-gradient(90deg, rgba(0, 0, 0, 0) calc(50% - 235px), rgba(255, 255, 255, 0.06) calc(50% - 235px), rgba(255, 255, 255, 0.06) calc(50% + 235px), rgba(0, 0, 0, 0) calc(50% + 235px)),
-      var(--page-bg);
+    background: var(--page-bg);
   }
 
   body[data-theme="light"][data-screen="overview"] {
-    background:
-      linear-gradient(90deg, rgba(255, 255, 255, 0) calc(50% - 235px), rgba(0, 0, 0, 0.045) calc(50% - 235px), rgba(0, 0, 0, 0.045) calc(50% + 235px), rgba(255, 255, 255, 0) calc(50% + 235px)),
-      var(--page-bg);
+    background: var(--page-bg);
+  }
+}
+
+@media (min-width: 900px) {
+  body[data-screen="overview"] {
+    --phone-width: 1180px;
+  }
+
+  body[data-screen="overview"] main {
+    padding: 18px clamp(28px, 5vw, 56px) 56px;
+  }
+
+  body[data-screen="overview"] .topbar {
+    padding-inline: clamp(28px, 5vw, 56px);
+  }
+
+  body[data-screen="overview"] .tabbar {
+    position: sticky;
+    top: 12px;
+    left: auto;
+    bottom: auto;
+    transform: none;
+    width: min(720px, 100%);
+    height: 62px;
+    margin: 0 auto 18px;
+    border-radius: 999px;
+    box-shadow: var(--shadow);
+  }
+
+  body[data-screen="overview"] .tab-button {
+    min-height: 46px;
+    font-size: 12px;
+  }
+
+  body[data-screen="overview"] .tab-button::before {
+    width: 20px;
+    height: 20px;
+  }
+
+  .cockpit {
+    display: grid;
+    grid-template-columns: minmax(360px, 0.85fr) minmax(460px, 1.15fr);
+    align-items: start;
+    gap: 16px;
+  }
+
+  .cockpit-hero,
+  .ios-grid,
+  .soc-card {
+    min-width: 0;
+  }
+
+  .cockpit-hero {
+    position: sticky;
+    top: 92px;
+    min-height: 520px;
+    align-content: start;
+    border: 1px solid var(--hairline);
+    border-radius: 30px;
+    padding: 24px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+  }
+
+  .vehicle-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  .vehicle-meta span {
+    color: var(--ink);
+    font-size: 18px;
+    font-weight: 750;
+  }
+
+  .vehicle-meta strong {
+    border: 1px solid var(--hairline);
+    border-radius: 999px;
+    padding: 6px 10px;
+    color: var(--muted);
+    background: var(--tile);
+    font-size: 12px;
+    font-weight: 750;
+  }
+
+  .charge-hero {
+    grid-template-columns: 1fr;
+    min-height: auto;
+    gap: 18px;
+  }
+
+  .charge-hero > div:first-child > strong {
+    font-size: 76px;
+  }
+
+  .charge-hero p {
+    font-size: 30px;
+  }
+
+  .range-bar {
+    width: 180px;
+  }
+
+  .vehicle-photo {
+    width: 100%;
+    height: 250px;
+    transform: none;
+  }
+
+  .ios-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .location-tile {
+    grid-column: span 2;
+    grid-row: span 2;
+    min-height: 260px;
+  }
+
+  .mini-map {
+    height: 132px;
+  }
+
+  .ios-card {
+    min-height: 124px;
+    border-radius: 18px;
+  }
+
+  .soc-card {
+    grid-column: 2;
+    grid-template-columns: minmax(0, 1fr) 150px;
+    min-height: 170px;
+    padding: 18px 20px;
+    border-radius: 22px;
+  }
+
+  .soc-line {
+    height: 88px;
+  }
+
+  .soc-copy strong {
+    font-size: 48px;
+  }
+
+  .soc-range strong {
+    font-size: 32px;
   }
 }
 

@@ -339,7 +339,7 @@ function renderCockpitLocation(position) {
 function renderInsightCard(title, valueText, detail, iconClass = "") {
   return `
     <article class="ios-card insight-tile">
-      <div class="tile-head"><span class="tile-icon ${iconClass}"></span><h3>${value(title)}</h3></div>
+      <div class="tile-head"><span class="tile-icon ${iconClass}" aria-hidden="true"></span><h3>${value(title)}</h3></div>
       <strong>${valueText}</strong>
       <p>${value(detail)}</p>
     </article>
@@ -494,10 +494,14 @@ function renderOverview(cars) {
         return `
           <article class="vehicle cockpit">
             <section class="cockpit-hero">
+              <div class="vehicle-meta">
+                <span>${value(car.name || "White Model 3")}</span>
+                <strong>JYJ602</strong>
+              </div>
               <div class="hero-status">
                 <span class="live-dot"></span>
                 <strong>${value(vehicleState(snapshot))}</strong>
-                <small>Updated ${timeOnly(lastDate)}</small>
+                <small>Updated ${timeOnly(lastDate)} · JYJ602</small>
               </div>
               <div class="charge-hero">
                 <div>
@@ -505,10 +509,9 @@ function renderOverview(cars) {
                   <div class="range-bar"><span style="width:${fillWidth}%"></span></div>
                   <p>${distance(range)}<small>Estimated Range</small></p>
                 </div>
-                <div class="vehicle-visual" aria-hidden="true">
-                  <div class="car-roof"></div>
-                  <div class="car-body"></div>
-                  <div class="car-glass"></div>
+                <div class="vehicle-photo">
+                  <img class="car-asset car-asset-dark" src="/assets/cars/model3-white-dark.png" alt="White Tesla Model 3, plate JYJ602">
+                  <img class="car-asset car-asset-light" src="/assets/cars/model3-white-light.png" alt="">
                 </div>
               </div>
             </section>
