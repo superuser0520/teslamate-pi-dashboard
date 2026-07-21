@@ -1080,3 +1080,500 @@ body[data-density="compact"] .vehicle-hero {
     font-size: 12px;
   }
 }
+
+body[data-screen="overview"] {
+  --phone-width: 430px;
+}
+
+body[data-screen="overview"] main {
+  width: min(var(--phone-width), 100%);
+  padding: 22px 18px calc(94px + env(safe-area-inset-bottom));
+}
+
+body[data-screen="overview"] .hero {
+  display: none;
+}
+
+body[data-screen="overview"] .topbar {
+  width: min(var(--phone-width), 100%);
+  margin: 0 auto;
+  border-bottom: 0;
+  background: transparent;
+  align-items: center;
+  flex-direction: row;
+}
+
+body[data-screen="overview"] .brand {
+  font-size: 25px;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+body[data-screen="overview"] .brand-mark {
+  display: none;
+}
+
+body[data-screen="overview"] .top-actions {
+  width: auto;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+body[data-screen="overview"] .privacy-pill {
+  display: none;
+}
+
+body[data-screen="overview"] .status-pill,
+body[data-screen="overview"] .logout-button {
+  width: 42px;
+  min-height: 42px;
+  overflow: hidden;
+  padding: 0;
+  border-radius: 50%;
+  color: transparent;
+  font-size: 0;
+}
+
+body[data-screen="overview"] .status-pill::before {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--ink);
+  background: transparent;
+}
+
+body[data-screen="overview"] .status-pill.online::before {
+  border-color: var(--green);
+  background: transparent;
+}
+
+body[data-screen="overview"] .logout-button::before {
+  content: "";
+  width: 17px;
+  height: 17px;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  box-shadow: 0 -8px 0 -6px var(--ink);
+}
+
+body[data-screen="overview"] .tabbar {
+  position: fixed;
+  left: 50%;
+  right: auto;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  top: auto;
+  transform: translateX(-50%);
+  width: min(394px, calc(100% - 28px));
+  height: 72px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
+  padding: 8px 8px 10px;
+  border-radius: 24px;
+}
+
+body[data-screen="overview"] .tab-button {
+  position: relative;
+  display: grid;
+  min-height: 52px;
+  place-items: end center;
+  border-radius: 16px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+body[data-screen="overview"] .tab-button::before {
+  content: "";
+  width: 18px;
+  height: 18px;
+  margin-bottom: 3px;
+  border: 2px solid currentColor;
+  border-radius: 5px;
+}
+
+body[data-screen="overview"] .tab-button[data-tab="trips"]::before {
+  border-radius: 9px 9px 4px 4px;
+}
+
+body[data-screen="overview"] .tab-button[data-tab="charging"]::before {
+  width: 12px;
+  border-radius: 2px;
+  transform: skew(-10deg);
+}
+
+body[data-screen="overview"] .tab-button[data-tab="activity"]::before {
+  border-radius: 4px;
+  box-shadow: inset 0 -6px 0 currentColor;
+}
+
+body[data-screen="overview"] .tab-button[data-tab="settings"]::before {
+  width: 20px;
+  height: 4px;
+  border: 0;
+  border-radius: 99px;
+  background: currentColor;
+  box-shadow: 0 -7px 0 currentColor, 0 7px 0 currentColor;
+}
+
+body[data-screen="overview"] .tab-button.active {
+  color: var(--blue);
+  background: transparent;
+}
+
+.cockpit-list,
+.cockpit {
+  gap: 10px;
+}
+
+.cockpit-hero {
+  display: grid;
+  gap: 10px;
+  padding: 2px 4px 0;
+}
+
+.hero-status {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 8px;
+  align-items: center;
+}
+
+.live-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.hero-status strong {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.hero-status small {
+  grid-column: 2;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.charge-hero {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  min-height: 120px;
+  align-items: center;
+}
+
+.charge-hero > div:first-child > strong {
+  color: var(--ink);
+  font-size: 50px;
+  line-height: 0.92;
+  font-weight: 400;
+}
+
+.charge-hero > div:first-child > span {
+  margin-left: 4px;
+  color: var(--ink);
+  font-size: 23px;
+  font-weight: 400;
+}
+
+.range-bar {
+  width: 96px;
+  height: 11px;
+  margin: 12px 0 9px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--muted) 22%, transparent);
+}
+
+.range-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--blue);
+}
+
+.charge-hero p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 23px;
+  line-height: 1.08;
+  font-weight: 450;
+}
+
+.charge-hero p small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.cockpit .vehicle-visual {
+  width: 235px;
+  height: 92px;
+  margin: 0;
+  justify-self: end;
+  transform: translateX(12px);
+}
+
+.cockpit .car-body {
+  bottom: 13px;
+  height: 42px;
+  border-radius: 42px 42px 17px 17px;
+}
+
+.cockpit .car-roof {
+  bottom: 42px;
+  height: 36px;
+}
+
+.cockpit .car-glass {
+  bottom: 49px;
+  height: 22px;
+}
+
+.ios-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ios-card {
+  min-height: 108px;
+  padding: 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--inner);
+  overflow: hidden;
+}
+
+.ios-card h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.location-tile {
+  grid-row: span 2;
+  min-height: 214px;
+  padding: 0;
+}
+
+.location-tile h3 {
+  padding: 12px 12px 8px;
+}
+
+.mini-map {
+  position: relative;
+  height: 92px;
+  overflow: hidden;
+  background: var(--tile);
+}
+
+.location-tile p {
+  margin: 10px 12px 2px;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 650;
+}
+
+.ios-link {
+  display: inline-block;
+  margin: 0 12px 12px;
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.ios-link.muted {
+  color: var(--muted);
+}
+
+.tile-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.tile-icon {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--blue);
+  border-radius: 5px;
+}
+
+.tile-icon.check {
+  border-radius: 50%;
+  border-color: var(--green);
+}
+
+.tile-icon.pulse {
+  width: 20px;
+  height: 10px;
+  border-width: 0 0 2px;
+  border-radius: 0;
+  transform: skew(-18deg);
+}
+
+.tile-icon.wallet {
+  border-radius: 3px;
+}
+
+.tile-icon.bars {
+  border-width: 0 0 2px 2px;
+  border-radius: 0;
+  box-shadow: 6px -3px 0 -4px var(--blue), 11px -8px 0 -4px var(--blue);
+}
+
+.insight-tile strong {
+  display: block;
+  margin-top: 18px;
+  color: var(--ink);
+  font-size: 23px;
+  line-height: 1;
+  font-weight: 400;
+}
+
+.insight-tile p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.soc-card {
+  display: grid;
+  grid-template-columns: 1fr 84px;
+  min-height: 102px;
+  padding: 12px 12px 12px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--inner);
+}
+
+.soc-copy span,
+.soc-range span,
+.soc-range small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.soc-copy strong,
+.soc-range strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--ink);
+  font-size: 28px;
+  line-height: 1;
+  font-weight: 400;
+}
+
+.soc-line {
+  grid-column: 1;
+  width: 100%;
+  height: 46px;
+  align-self: end;
+}
+
+.soc-line polyline {
+  fill: none;
+  stroke: var(--blue);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 4;
+}
+
+.soc-range {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: grid;
+  align-content: center;
+  border-left: 1px solid var(--hairline);
+  padding-left: 16px;
+}
+
+.soc-range strong {
+  font-size: 21px;
+}
+
+.soc-range small {
+  margin-top: 10px;
+  color: var(--green);
+}
+
+.details-stack {
+  display: grid;
+  gap: 10px;
+}
+
+body[data-screen="overview"] .cockpit-secondary {
+  display: none;
+}
+
+body[data-screen="overview"] .panel,
+body[data-screen="overview"] .location-card,
+body[data-screen="overview"] .metric {
+  border-radius: 14px;
+  box-shadow: var(--inner);
+}
+
+body[data-screen="overview"] .panel {
+  padding: 14px;
+}
+
+body[data-screen="overview"] .panel h3 {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+body[data-screen="overview"] .battery-wrap {
+  grid-template-columns: 1fr;
+}
+
+body[data-screen="overview"] .battery {
+  width: 100%;
+  height: 68px;
+}
+
+body[data-screen="overview"] .activity-grid {
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 861px) {
+  body[data-screen="overview"] {
+    background:
+      linear-gradient(90deg, rgba(0, 0, 0, 0) calc(50% - 235px), rgba(255, 255, 255, 0.06) calc(50% - 235px), rgba(255, 255, 255, 0.06) calc(50% + 235px), rgba(0, 0, 0, 0) calc(50% + 235px)),
+      var(--page-bg);
+  }
+
+  body[data-theme="light"][data-screen="overview"] {
+    background:
+      linear-gradient(90deg, rgba(255, 255, 255, 0) calc(50% - 235px), rgba(0, 0, 0, 0.045) calc(50% - 235px), rgba(0, 0, 0, 0.045) calc(50% + 235px), rgba(255, 255, 255, 0) calc(50% + 235px)),
+      var(--page-bg);
+  }
+}
+
+@media (max-width: 460px) {
+  body[data-screen="overview"] main {
+    padding-top: 8px;
+    padding-inline: 16px;
+  }
+
+  .charge-hero {
+    grid-template-columns: 126px 1fr;
+  }
+
+  .cockpit .vehicle-visual {
+    width: 212px;
+  }
+}

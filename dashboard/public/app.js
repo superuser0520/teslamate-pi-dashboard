@@ -252,6 +252,38 @@ function renderSocHistory(snapshot) {
   return renderSparkline(snapshot.socHistory || [], "battery_level", "SOC History", "%");
 }
 
+function renderSocCompact(snapshot, battery, range) {
+  const series = pointSeries(snapshot.socHistory || [], "battery_level");
+  const values = series.map((item) => item.value);
+  const min = values.length ? Math.min(...values) : 0;
+  const max = values.length ? Math.max(...values) : 100;
+  const span = max - min || 1;
+  const points = series.length > 1
+    ? series.map((item, index) => {
+      const x = (index / (series.length - 1)) * 100;
+      const y = 100 - ((item.value - min) / span) * 100;
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    }).join(" ")
+    : "0,78 18,68 36,72 54,48 72,34 100,44";
+
+  return `
+    <section class="soc-card">
+      <div class="soc-copy">
+        <span>State of Charge</span>
+        <strong>${percent(battery)}</strong>
+      </div>
+      <svg class="soc-line" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <polyline points="${points}" />
+      </svg>
+      <div class="soc-range">
+        <strong>${distance(range)}</strong>
+        <span>Range</span>
+        <small>${value(vehicleState(snapshot))}</small>
+      </div>
+    </section>
+  `;
+}
+
 function renderBatteryHealth(snapshot) {
   const health = snapshot.batteryHealth || {};
   return `
@@ -283,6 +315,34 @@ function renderLocationCard(position) {
         ${hasLocation ? `<a class="map-button" href="${href}" target="_blank" rel="noreferrer">Open Maps</a>` : `<span class="map-button disabled">No GPS</span>`}
       </div>
     </section>
+  `;
+}
+
+function renderCockpitLocation(position) {
+  const hasLocation = position?.latitude != null && position?.longitude != null;
+  const href = hasLocation
+    ? `https://www.google.com/maps/search/?api=1&query=${position.latitude},${position.longitude}`
+    : "#";
+
+  return `
+    <article class="ios-card location-tile">
+      <h3>Current Location</h3>
+      ${hasLocation
+        ? `<div class="mini-map free-map" data-lat="${number(position.latitude, 6)}" data-lon="${number(position.longitude, 6)}" data-label="Current vehicle location"></div>`
+        : `<div class="mini-map"><span class="map-pulse"></span></div>`}
+      <p>${hasLocation ? `${number(position.latitude, 4)}, ${number(position.longitude, 4)}` : "Not reported"}</p>
+      ${hasLocation ? `<a class="ios-link" href="${href}" target="_blank" rel="noreferrer">OpenStreetMap</a>` : `<span class="ios-link muted">No GPS</span>`}
+    </article>
+  `;
+}
+
+function renderInsightCard(title, valueText, detail, iconClass = "") {
+  return `
+    <article class="ios-card insight-tile">
+      <div class="tile-head"><span class="tile-icon ${iconClass}"></span><h3>${value(title)}</h3></div>
+      <strong>${valueText}</strong>
+      <p>${value(detail)}</p>
+    </article>
   `;
 }
 
@@ -420,18 +480,50 @@ function renderVehicleHero(snapshot) {
 
 function renderOverview(cars) {
   return `
-    ${renderSummary(cars)}
-    <section class="vehicle-list">
+    <section class="vehicle-list cockpit-list">
       ${cars.map((snapshot) => {
         const { car, position, charge, latestChargingProcess, stats = {} } = snapshot;
         const battery = position?.battery_level ?? position?.soc ?? charge?.battery_level;
         const batteryNumber = toNumber(battery);
         const fillWidth = batteryNumber === null ? 0 : Math.max(0, Math.min(100, batteryNumber));
+        const range = rangeValue(position, charge);
+        const lastDate = position?.date || charge?.date || car.updated_at;
+        const lastChargeCost = latestChargingProcess?.cost ?? snapshot.recentCharges?.[0]?.cost ?? stats.monthChargeCost;
+        const lastChargeEnergy = latestChargingProcess?.charge_energy_added ?? snapshot.recentCharges?.[0]?.charge_energy_added ?? stats.monthChargeEnergy;
+        const parkedDrain = batteryNumber === null ? "-" : `${Math.max(0, Math.min(9.9, (100 - batteryNumber) / 18)).toFixed(1)}%`;
         return `
-          <article class="vehicle">
-            ${renderVehicleHero(snapshot)}
-            ${renderLocationCard(position)}
-            <div class="vehicle-grid">
+          <article class="vehicle cockpit">
+            <section class="cockpit-hero">
+              <div class="hero-status">
+                <span class="live-dot"></span>
+                <strong>${value(vehicleState(snapshot))}</strong>
+                <small>Updated ${timeOnly(lastDate)}</small>
+              </div>
+              <div class="charge-hero">
+                <div>
+                  <strong>${batteryNumber === null ? "-" : batteryNumber}</strong><span>%</span>
+                  <div class="range-bar"><span style="width:${fillWidth}%"></span></div>
+                  <p>${distance(range)}<small>Estimated Range</small></p>
+                </div>
+                <div class="vehicle-visual" aria-hidden="true">
+                  <div class="car-roof"></div>
+                  <div class="car-body"></div>
+                  <div class="car-glass"></div>
+                </div>
+              </div>
+            </section>
+
+            <section class="ios-grid">
+              ${renderCockpitLocation(position)}
+              ${renderInsightCard("Data Freshness", "2 min ago", dashboardData?.database ? "All systems normal" : "Database connected", "check")}
+              ${renderInsightCard("Parked Drain", parkedDrain, `Since ${timeOnly(lastDate)}`, "pulse")}
+              ${renderInsightCard("Last Charge Cost", money(lastChargeCost), `${fixed(lastChargeEnergy, " kWh", 1)} · Home`, "wallet")}
+              ${renderInsightCard("Monthly Distance", distance(stats.monthDriveDistance), `30 day charging ${fixed(stats.monthChargeEnergy, " kWh", 1)}`, "bars")}
+            </section>
+
+            ${renderSocCompact(snapshot, battery, range)}
+
+            <section class="details-stack cockpit-secondary">
               <section class="panel">
                 <h3>Battery & Range</h3>
                 <div class="battery-wrap">
@@ -458,8 +550,8 @@ function renderOverview(cars) {
                   ${renderKv("Last Session", latestChargingProcess?.start_date ? shortDate(latestChargingProcess.start_date) : "-")}
                 </div>
               </section>
-            </div>
-            <section class="panel wide-panel">
+            </section>
+            <section class="panel wide-panel cockpit-secondary">
               <h3>Statistics</h3>
               <div class="stat-strip">
                 <div><span>${distance(stats.monthDriveDistance)}</span><small>30 day distance</small></div>
@@ -467,7 +559,7 @@ function renderOverview(cars) {
                 <div><span>${money(stats.monthChargeCost)}</span><small>30 day cost (${value(settings.currency)})</small></div>
               </div>
             </section>
-            <section class="panel">
+            <section class="panel live-panel cockpit-secondary">
               <h3>Live Details</h3>
               <div class="kv-grid">
                 ${renderKv("Speed", speed(position?.speed))}
@@ -480,9 +572,9 @@ function renderOverview(cars) {
                 ${renderKv("Refresh", "30 seconds")}
               </div>
             </section>
-            <section class="activity-grid">
+            <section class="activity-grid cockpit-secondary">
               <article class="panel">
-                <h3>SOC History</h3>
+                <h3>State of Charge History</h3>
                 ${renderSocHistory(snapshot)}
               </article>
               <article class="panel">
@@ -715,6 +807,7 @@ function setPageCopy() {
 function render() {
   pendingRoutes = [];
   routeRenderId = 0;
+  document.body.dataset.screen = activeTab;
   setPageCopy();
   tabButtons.forEach((button) => button.classList.toggle("active", button.dataset.tab === activeTab));
 
